@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="ArgonGui">
+      <UniqueIdentifier>{b69b0a5e-0e14-40c0-880b-cf0faa8eb485}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Main">
+      <UniqueIdentifier>{3c0482b1-c93f-4b54-bd73-566587407af6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ArgonGui\Backends">
+      <UniqueIdentifier>{b5b5633e-8433-42b8-9e71-43344b1d2386}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\ArgonContext.cpp">
+      <Filter>ArgonGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ArgonCore.cpp">
+      <Filter>ArgonGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ArgonGraphic.cpp">
+      <Filter>ArgonGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ArgonInput.cpp">
+      <Filter>ArgonGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ArgonRender.cpp">
+      <Filter>ArgonGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Backends\ArgonDx11Renderer.cpp">
+      <Filter>ArgonGui\Backends</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Backends\ArgonFreeTypeGlyphParser.cpp">
+      <Filter>ArgonGui\Backends</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Backends\ArgonWin32Platform.cpp">
+      <Filter>ArgonGui\Backends</Filter>
+    </ClCompile>
+    <ClCompile Include="Demo.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
+    <ClCompile Include="Main.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\ArgonContext.h">
+      <Filter>ArgonGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ArgonCore.h">
+      <Filter>ArgonGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ArgonGraphic.h">
+      <Filter>ArgonGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ArgonInput.h">
+      <Filter>ArgonGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ArgonMath.h">
+      <Filter>ArgonGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ArgonRender.h">
+      <Filter>ArgonGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Backends\ArgonDx11Renderer.h">
+      <Filter>ArgonGui\Backends</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Backends\ArgonFreeTypeGlyphParser.h">
+      <Filter>ArgonGui\Backends</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Backends\ArgonWin32Platform.h">
+      <Filter>ArgonGui\Backends</Filter>
+    </ClInclude>
+    <ClInclude Include="Demo.h">
+      <Filter>Main</Filter>
+    </ClInclude>
+    <ClInclude Include="Main.h">
+      <Filter>Main</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
