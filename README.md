@@ -8,6 +8,18 @@ ArgonGui 是一个为现代 C++17 开发者打造的极简高灵活度 GUI 框�
 ![Forks](https://img.shields.io/github/forks/NaOrganization/ArgonGui?style=flat-square)
 ![Issues](https://img.shields.io/github/issues/NaOrganization/ArgonGui?style=flat-square)
 ![License](https://img.shields.io/github/license/NaOrganization/ArgonGui?style=flat-square)
+
+---
+
+## 📚 依赖 Dependencies
+
+ArgonGui 部分模块依赖以下开源库：
+
+- [FreeType](https://freetype.org) — 用于字体解析和字形生成 (ArgonFreeTypeGlyphParser)
+- [fmt](https://github.com/fmtlib/fmt) — 高性能的格式化字符串库 (Example\Exe_Dx11_Win32\Main)
+
+推荐使用 [`vcpkg`](https://github.com/microsoft/vcpkg) 来安装依赖项：
+
 ---
 
 ## ✨ 特性 Features
@@ -31,8 +43,6 @@ git submodule add https://github.com/yourusername/ArgonGui
 编译要求：
 - C++17 支持
 - 支持平台：Windows
-
----
 
 ### ⭐ Star 历史图（GitHub Profile Trophy）
 
