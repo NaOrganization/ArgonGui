@@ -11,6 +11,16 @@ ArgonGui 是一个为现代 C++17 开发者打造的极简高灵活度 GUI 框�
 
 ---
 
+## ✨ 特性 Features
+
+- **极简 API** —— 更少的模板，更接近硬件的控制感
+- **层级架构设计** —— 分为 Global / Subsystem / Platform 三层结构
+- **输入系统** —— 内建跨平台键盘、鼠标、手柄支持
+- **图形元素系统** —— 层级式聚焦与悬停管理，轻松控制 UI 流程
+- **无主循环** —— 你控制何时刷新，ArgonGui 永远只是你的工具，而不是主角
+
+---
+
 ## 📚 依赖 Dependencies
 
 ArgonGui 部分模块依赖以下开源库：
@@ -25,16 +35,6 @@ vcpkg install freetype:x64-windows
 vcpkg install fmt:x86-windows
 vcpkg install freetype:x86-windows
 ```
-
----
-
-## ✨ 特性 Features
-
-- **极简 API** —— 更少的模板，更接近硬件的控制感
-- **层级架构设计** —— 分为 Global / Subsystem / Platform 三层结构
-- **输入系统** —— 内建跨平台键盘、鼠标、手柄支持
-- **图形元素系统** —— 层级式聚焦与悬停管理，轻松控制 UI 流程
-- **无主循环** —— 你控制何时刷新，ArgonGui 永远只是你的工具，而不是主角
 
 ---
 
