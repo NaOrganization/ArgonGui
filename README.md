@@ -1,6 +1,6 @@
 # ⚡ ArgonGui
 
-> *A lightweight, cross-platform GUI framework that doesn't ask for much—just your heart.* ❤️
+> *A lightweight, cross-platform, untrammeled GUI framework that doesn't ask for much—just your heart.* ❤️
 
 ArgonGui 是一个为现代 C++17 开发者打造的极简高灵活度 GUI 框架。
 
