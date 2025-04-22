@@ -8,6 +8,7 @@ ArgonGui 是一个为现代 C++17 开发者打造的极简高灵活度 GUI 框�
 ![Forks](https://img.shields.io/github/forks/NaOrganization/ArgonGui?style=flat)
 ![Issues](https://img.shields.io/github/issues/NaOrganization/ArgonGui?style=flat)
 ![License](https://img.shields.io/github/license/NaOrganization/ArgonGui?style=flat)
+![Wiki](https://img.shields.io/badge/Wiki-Available-blue?style=flat-square&logo=github&link=https://github.com/NaOrganization/ArgonGui/wiki)
 
 ---
 
