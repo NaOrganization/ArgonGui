@@ -107,6 +107,7 @@ using ArShaderID = void*;
 class ArGraphicRenderList;
 class ArGraphicBoundingBox;
 class ArGraphicElement;
+class ArGraphicLayer;
 class ArGraphicPrimRenderListElement;
 class ArgonGraphicManager;
 
