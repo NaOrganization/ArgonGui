@@ -19,6 +19,12 @@ ArgonGui 部分模块依赖以下开源库：
 - [fmt](https://github.com/fmtlib/fmt) — 高性能的格式化字符串库 (Example\Exe_Dx11_Win32\Main)
 
 推荐使用 [`vcpkg`](https://github.com/microsoft/vcpkg) 来安装依赖项：
+```bash
+vcpkg install fmt:x64-windows
+vcpkg install freetype:x64-windows
+vcpkg install fmt:x86-windows
+vcpkg install freetype:x86-windows
+```
 
 ---
 
