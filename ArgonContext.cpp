@@ -1,8 +1,9 @@
-#include "ArgonCore.h"
+﻿#include "ArgonCore.h"
 
 void ArgonContextStatus::Awake()
 {
 	startTime = ArHelp::GetTimePoint();
+	currentTime = startTime;
 	started = true;
 }
 
@@ -101,11 +102,11 @@ bool ArgonContext::StartFrame()
 
 	inputManager.StartFrame();
 
-	graphicManager.StartFrame(*this);
-
 	renderer->StartFrame(renderManager);
 
 	renderManager.StartFrame();
+
+	graphicManager.StartFrame(*this);
 
 	return true;
 }

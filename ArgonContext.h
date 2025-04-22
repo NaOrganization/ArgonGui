@@ -31,8 +31,6 @@ public:
 // [CLASS] [ArgonContext] - The main context of ArgonGui
 class ArgonContext final
 {
-private:
-	std::mutex contextMutex = {};
 public:
 	IArgonPlatform* platform = nullptr;
 	IArgonRenderer* renderer = nullptr;
@@ -51,20 +49,35 @@ public:
 	static ArgonContext& GetInstance();
 
 	bool SetPlatform(IArgonPlatform* platform, const IArPlatformConfig& platformConfig);
+
 	bool SetRenderer(IArgonRenderer* renderer, const IArRendererConfig& rendererConfig);
+
 	bool SetGlyphParser(IArgonGlyphParser* glyphParser);
 
+
 	bool Initialize();
+
 	void Shutdown();
+
 	void PauseRender() { contextStatus.paused = true; }
+
 	void ContinueRender() { contextStatus.paused = false; }
+
 	bool IsRunning() const { return contextStatus.running; }
+
 	bool IsStarted() const { return contextStatus.started; }
+
 	bool IsAllInterfacesReady() const { return platform && renderer && renderManager.textureManager.glyphParser; }
+
 	float GetDeltaTime() const { return std::chrono::duration<float>(contextStatus.deltaTime).count(); }
 
+	ArDuration GetDeltaTimeInArDuration() const { return contextStatus.deltaTime; }
+
+
 	bool StartFrame();
+
 	void EndFrame();
+
 	bool FrameUpdate(); // StartFrame + EndFrame
 
 	void Present();
