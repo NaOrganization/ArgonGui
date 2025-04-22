@@ -4,11 +4,11 @@
 
 ArgonGui 是一个为现代 C++17 开发者打造的极简高灵活度 GUI 框架。
 
-![Stars](https://img.shields.io/github/stars/NaOrganization/ArgonGui?style=flat)
-![Forks](https://img.shields.io/github/forks/NaOrganization/ArgonGui?style=flat)
-![Issues](https://img.shields.io/github/issues/NaOrganization/ArgonGui?style=flat)
-![License](https://img.shields.io/github/license/NaOrganization/ArgonGui?style=flat)
-![Wiki](https://img.shields.io/badge/Wiki-Available-blue?style=flat-square&logo=github&link=https://github.com/NaOrganization/ArgonGui/wiki)
+[![Stars](https://img.shields.io/github/stars/NaOrganization/ArgonGui?style=flat)](https://github.com/NaOrganization/ArgonGui/issues)
+[![Forks](https://img.shields.io/github/forks/NaOrganization/ArgonGui?style=flat)](https://github.com/NaOrganization/ArgonGui/forks)
+[![Issues](https://img.shields.io/github/issues/NaOrganization/ArgonGui?style=flat)](https://github.com/NaOrganization/ArgonGui/issues)
+[![License](https://img.shields.io/github/license/NaOrganization/ArgonGui?style=flat)](./LICENSE)
+[![Wiki](https://img.shields.io/badge/Wiki-Available-blue?style=flat-square&logo=github&link=https://github.com/NaOrganization/ArgonGui/wiki)](https://github.com/NaOrganization/ArgonGui/wiki)
 
 ---
 
