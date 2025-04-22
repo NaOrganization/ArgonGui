@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <unordered_map>
 #include <map>
 #include <queue>
@@ -92,12 +92,25 @@ class ArgonRenderManager;
 
 class IArgonGlyphParser;
 class IArRendererConfig;
+class IArRenderCustomCreateConfig;
 class IArgonRenderer;
 
 // [ALIAS] [ArgonRenderSystem] - Standard texture type
 using ArTextureID = void*;
 // [ALIAS] [ArgonRenderSystem] - Standard shader type
-using ArCustomShaderID = void*;
+using ArShaderID = void*;
+
+// ----------------------------------------------------------- //
+//  !. Forward declarations: ArgonGraphic
+// ----------------------------------------------------------- //
+
+class ArGraphicRenderList;
+class ArGraphicBoundingBox;
+class ArGraphicElement;
+class ArGraphicPrimRenderListElement;
+class ArgonGraphicManager;
+
+class IArGraphicComponent;
 
 // ---------------------------------------------------------- //
 //  !. Forward declarations: ArgonContext

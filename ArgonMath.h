@@ -38,6 +38,11 @@ public:
 			return ArVec2(x / length, y / length);
 		return ArVec2(0.f, 0.f);
 	}
+
+	float Length() const
+	{
+		return sqrtf(x * x + y * y);
+	}
 };
 
 class ArVec3 final

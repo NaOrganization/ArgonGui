@@ -434,6 +434,3 @@ bool ArgonInputManager::IsButtonClicked(const ArButtonState& buttonState, int cl
 	ArDuration interval = lastTime - firstTime;
 	return interval < MaxClickInterval;
 }
-
-// TODO:
-//	1.修正Click的逻辑

@@ -2,18 +2,16 @@
 #include "ArgonCore.h"
 #include <fstream>
 
-//-----------------------------------------------------------------------------
-// [SECTION] Default font data (ProggyClean.ttf)
-//-----------------------------------------------------------------------------
+// ---------------------------------------------------------- //
+// !. Default font data
+// ---------------------------------------------------------- //
 // ProggyClean.ttf
 // Copyright (c) 2004, 2005 Tristan Grimmer
 // MIT license (see License.txt in http://www.upperbounds.net/download/ProggyClean.ttf.zip)
 // Download and more information at http://upperbounds.net
-//-----------------------------------------------------------------------------
+// ---------------------------------------------------------- //
 // File: 'ProggyClean.ttf' (41208 bytes)
-// Exported using misc/fonts/binary_to_compressed_c.cpp (with compression + base85 string encoding).
-// The purpose of encoding as base85 instead of "0x00,0x01,..." style is only save on _source code_ size.
-//-----------------------------------------------------------------------------
+// ---------------------------------------------------------- //
 static const int8_t proggy_clean_ttf_compressed_data_base85[11980 + 1] =
 "7])#######hV0qs'/###[),##/l:$#Q6>##5[n42>c-TH`->>#/e>11NNV=Bv(*:.F?uu#(gRU.o0XGH`$vhLG1hxt9?W`#,5LsCp#-i>.r$<$6pD>Lb';9Crc6tgXmKVeU2cD4Eo3R/"
 "2*>]b(MC;$jPfY.;h^`IWM9<Lh2TlS+f-s$o6Q<BWH`YiU.xfLq$N;$0iR/GX:U(jcW2p/W*q?-qmnUCI;jHSAiFWM.R*kU@C=GH?a9wp8f$e.-4^Qg1)Q-GL(lf(r/7GrRgwV%MS=C#"
@@ -102,6 +100,10 @@ static const int8_t proggy_clean_ttf_compressed_data_base85[11980 + 1] =
 "GT4CPGT4CPGT4CPGT4CPGT4CPGT4CP-qekC`.9kEg^+F$kwViFJTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5o,^<-28ZI'O?;xp"
 "O?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xp;7q-#lLYI:xvD=#";
 
+// ---------------------------------------------------------- //
+// !. STB Decompress
+// ---------------------------------------------------------- //
+
 static unsigned int stb_decompress_length(const unsigned char* input)
 {
 	return (input[8] << 24) + (input[9] << 16) + (input[10] << 8) + input[11];
@@ -179,6 +181,10 @@ static unsigned int stb_adler32(unsigned int adler32, unsigned char* buffer, uns
 	return (unsigned int)(s2 << 16) + (unsigned int)s1;
 }
 
+// ---------------------------------------------------------- //
+// !. Base85 Decode
+// ---------------------------------------------------------- //
+
 static unsigned int stb_decompress(unsigned char* output, const unsigned char* i, unsigned int /*length*/)
 {
 	if (stb__in4(0) != 0x57bC0000) return 0;
@@ -220,6 +226,10 @@ static void         Decode85(const unsigned char* src, unsigned char* dst)
 	}
 }
 
+// ---------------------------------------------------------- //
+// !. ArRenderListSharedData implementation
+// ---------------------------------------------------------- //
+
 ArRenderListSharedData::ArRenderListSharedData()
 {
 	circleSegmentMaxError = 0.3f;
@@ -236,255 +246,9 @@ ArRenderListSharedData::ArRenderListSharedData()
 	arcFastRadiusCutoff = ((circleSegmentMaxError) / (1 - cosf(3.14159265358979323846f / ArMax((float)(48), 3.14159265358979323846f))));
 }
 
-void ArTextureAtlas::OnDestroy(IArgonRenderer* renderer)
-{
-	if (pixels)
-	{
-		delete[] pixels;
-		pixels = nullptr;
-	}
-	dirty = false;
-	renderer->ReleaseTexture(textureId);
-}
-
-ArFontFace::ArFontFace(ArGuiID fontId, const std::string& name)
-	: fontId(fontId), name(name)
-{
-	// query fallback glyphs
-	QueueGlyph(u'\xFFFD', 16u, ArGlyphFlag::None);
-	QueueGlyph('?', 16u, ArGlyphFlag::None);
-	QueueGlyph(' ', 16u, ArGlyphFlag::None);
-}
-
-void ArFontFace::QueueGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
-{
-	queryQueue.emplace(codepoint, size, flags);
-}
-
-ArFontFace::GlyphInfo* ArFontFace::GetGlyphNoFallback(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
-{
-	GlyphCacheKey key = GlyphCacheKey(codepoint, size, flags);
-	auto it = glyphs.find(key);
-	if (it == glyphs.end())
-		return nullptr;
-	return &it->second;
-}
-
-ArFontFace::GlyphInfo* ArFontFace::GetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
-{
-	GlyphCacheKey key = GlyphCacheKey(codepoint, size, flags);
-	auto it = glyphs.find(key);
-	if (it == glyphs.end())
-		return fallbackGlyph;
-	return &it->second;
-}
-
-ArFontFace::GlyphInfo* ArFontFace::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
-{
-	ArFontFace::GlyphInfo* glyphInfo = GetGlyph(codepoint, size, flags);
-	if (glyphInfo)
-		return glyphInfo;
-	QueueGlyph(codepoint, size, flags);
-	return fallbackGlyph;
-}
-
-void ArFontFace::EndFrame(ArTextureManager& textureManager)
-{
-	while (!queryQueue.empty())
-	{
-		GlyphCacheKey& key = queryQueue.front();
-		auto it = glyphs.find(key);
-		queryQueue.pop();
-		if (it != glyphs.end())
-			continue;
-		auto parserResult = textureManager.glyphParser->ParseGlyph(*this, key);
-		if (!parserResult.has_value())
-			continue;
-
-		ArFontFace::GlyphInfo glyphInfo = parserResult->glyphInfo;
-
-		ArTextureManager::Territory territory = textureManager.AllocateTerritory((int)glyphInfo.size.x, (int)glyphInfo.size.y);
-		if (territory.IsValid())
-		{
-			ArTextureAtlas& atlas = textureManager.atlases[territory.atlasIndex];
-
-			glyphInfo.textureAtlasIndex = territory.atlasIndex;
-
-			for (int y = 0; y < territory.size.y; y++)
-			{
-				unsigned int* write_ptr = &atlas.pixels[territory.position.x + ((territory.position.y + y) * atlas.atlasSize.x)];
-				for (int x = 0; x < territory.size.x; x++)
-				{
-					*(write_ptr + x) = parserResult->pixels[x + y * territory.size.x];
-				}
-			}
-
-			glyphInfo.uv = ArRect(
-				(float)(territory.position.x) * atlas.uvScale.x,
-				(float)(territory.position.y) * atlas.uvScale.y,
-				(float)(territory.position.x + territory.size.x) * atlas.uvScale.x,
-				(float)(territory.position.y + territory.size.y) * atlas.uvScale.y);
-			atlas.dirty = true;
-		}
-
-		glyphs[key] = glyphInfo;
-	}
-
-	if (!fallbackGlyph)
-	{
-		fallbackGlyph = GetGlyph(u'\xFFFD', 16u, ArGlyphFlag::None);
-		if (!fallbackGlyph)
-			fallbackGlyph = GetGlyph('?', 16u, ArGlyphFlag::None);
-		if (!fallbackGlyph)
-			fallbackGlyph = GetGlyph(' ', 16u, ArGlyphFlag::None);
-	}
-}
-
-void ArTextureManager::Awake(ArRenderListSharedData& sharedData)
-{
-	BuildBaseTerritories(sharedData);
-}
-
-void ArTextureManager::StartFrame()
-{
-	while (!fontFaceQueryQueue.empty())
-	{
-		FontFaceQuery& query = fontFaceQueryQueue.front();
-		auto result = glyphParser->InitFontFace((uint8_t*)query.fontBinary, query.binarySize);
-		fontFaceQueryQueue.pop();
-		if (!result.has_value())
-			continue;
-		fontFaces.emplace_back(result->fontId, result->name);
-	}
-}
-
-void ArTextureManager::EndFrame(ArRenderListSharedData& sharedData)
-{
-	for (auto& fontFace : fontFaces)
-	{
-		fontFace.EndFrame(*this);
-	}
-}
-
-ArTextureManager::Territory ArTextureManager::AllocateTerritory(int width, int height)
-{
-	if (width <= 0 || height <= 0)
-		return {};
-
-	stbrp_rect rect = {};
-	rect.w = width;
-	rect.h = height;
-
-	auto atlasIt = atlases.begin();
-
-	Territory territory = Territory();
-	territory.size = ArIntVec2(width, height);
-	do
-	{
-		if (atlasIt == atlases.end())
-		{
-			atlases.emplace_back();
-			atlasIt = std::prev(atlases.end());
-		}
-		auto& atlas = *atlasIt;
-
-		if (stbrp_pack_rects(&atlas.rectPackerContext, &rect, 1))
-		{
-			territory.atlasIndex = int(atlasIt - atlases.begin());
-			territory.position = ArIntVec2(rect.x, rect.y);
-			break;
-		}
-
-		atlasIt++;
-	} while (!rect.was_packed);
-	territories.push_back(territory);
-	return territory;
-}
-
-ArFontFace::GlyphInfo* ArTextureManager::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags) const
-{
-	for (auto& fontFace : fontFaces)
-	{
-		if (!glyphParser->HasGlyph(fontFace.fontId, codepoint))
-			continue;
-		ArFontFace::GlyphInfo* glyphInfo = fontFace.GetGlyphNoFallback(codepoint, size, flags);
-		if (glyphInfo)
-			return glyphInfo;
-		fontFace.QueueGlyph(codepoint, size, flags);
-	}
-	return nullptr;
-}
-
-std::vector<ArFontFace::GlyphInfo*> ArTextureManager::TryGetGlyphs(ArStringView text, uint32_t size, ArGlyphFlag flags) const
-{
-	std::vector<uint32_t> codePoints = ArHelp::Utf8::DecodeToCodepoints(text);
-	std::vector<ArFontFace::GlyphInfo*> glyphInfos;
-	glyphInfos.reserve(codePoints.size());
-	for (auto& code : codePoints)
-	{
-		glyphInfos.push_back(TryGetGlyph(code, size, flags));
-	}
-	return glyphInfos;
-}
-
-ArVec2 ArTextureManager::CalcTextSize(ArStringView text, uint32_t size, ArGlyphFlag flags) const
-{
-	std::vector<ArFontFace::GlyphInfo*> glyphInfos = TryGetGlyphs(text, size, flags);
-	ArVec2 textSize = ArVec2(0, 0);
-	for (auto& glyphInfo : glyphInfos)
-	{
-		if (!glyphInfo)
-			continue;
-		textSize.x += glyphInfo->advanceX;
-		textSize.y = ArMax(textSize.y, glyphInfo->size.y);
-	}
-	ArVec2 padding = ArVec2(0.5f, 0.5f);
-	textSize.x += padding.x * 2;
-	textSize.y += padding.y * 2;
-	textSize.x = ArMax(textSize.x, 1.0f);
-	textSize.y = ArMax(textSize.y, 1.0f);
-	return textSize;
-}
-
-void ArTextureManager::BuildBaseTerritories(ArRenderListSharedData& sharedData)
-{
-	buildedBaseTerritories = true;
-
-	Territory antiAliasingGlyph = AllocateTerritory(64, 64);
-	ArTextureAtlas& atlas = atlases[0];
-	for (int n = 0; n < 64; n++)
-	{
-		unsigned int y = n;
-		unsigned int line_width = n;
-		unsigned int pad_left = (antiAliasingGlyph.size.x - line_width) / 2;
-		unsigned int pad_right = antiAliasingGlyph.size.x - (pad_left + line_width);
-
-
-		unsigned int* write_ptr = &atlas.pixels[antiAliasingGlyph.position.x + ((antiAliasingGlyph.position.y + y) * atlas.atlasSize.x)];
-		for (unsigned int i = 0; i < pad_left; i++)
-			*(write_ptr + i) = AR_COL32(255, 255, 255, 0);
-
-		for (unsigned int i = 0; i < line_width; i++)
-			*(write_ptr + pad_left + i) = AR_COL32_WHITE;
-
-		for (unsigned int i = 0; i < pad_right; i++)
-			*(write_ptr + pad_left + line_width + i) = AR_COL32(255, 255, 255, 0);
-
-		ArVec2 uv0 = ArVec2((float)(antiAliasingGlyph.position.x + pad_left - 1), (float)(antiAliasingGlyph.position.y + y)) * atlas.uvScale;
-		ArVec2 uv1 = ArVec2((float)(antiAliasingGlyph.position.x + pad_left + line_width + 1), (float)(antiAliasingGlyph.position.y + y + 1)) * atlas.uvScale;
-		float half_v = (uv0.y + uv1.y) * 0.5f;
-		sharedData.uvOfBakeLines[n] = ArVec4(uv0.x, half_v, uv1.x, half_v);
-	}
-
-	Territory whitePixel = AllocateTerritory(2, 2);
-	for (int y = 0; y < whitePixel.size.y; y++)
-	{
-		unsigned int* write_ptr = &atlas.pixels[whitePixel.position.x + ((whitePixel.position.y + y) * atlas.atlasSize.x)];
-		for (int x = 0; x < whitePixel.size.x; x++)
-			*(write_ptr + x) = AR_COL32_WHITE;
-	}
-	sharedData.uvOfWhitInTexture = ArVec2(whitePixel.position.x + 0.5f, whitePixel.position.y + 0.5f) * atlas.uvScale;
-}
+// ---------------------------------------------------------- //
+// !. ArRenderList implementation
+// ---------------------------------------------------------- //
 
 ArRenderList::ArRenderList(ArRenderListSharedData* sharedData)
 {
@@ -695,11 +459,7 @@ void ArRenderList::AddPolyline(const std::vector<ArVec2>& points, uint32_t color
 				// Average normals
 				float dm_x = (tempNormals[i1].x + tempNormals[i2].x) * 0.5f;
 				float dm_y = (tempNormals[i1].y + tempNormals[i2].y) * 0.5f;
-				{
-					float d2 = dm_x * dm_x + dm_y * dm_y; if (d2 > 0.000001f) {
-						float inv_len2 = 1.0f / d2; if (inv_len2 > 100.0f) inv_len2 = 100.0f; dm_x *= inv_len2; dm_y *= inv_len2;
-					}
-				} (void)0;
+				float d2 = dm_x * dm_x + dm_y * dm_y; if (d2 < 0.5f) d2 = 0.5f; float inv_lensq = 1.0f / d2; dm_x *= inv_lensq; dm_y *= inv_lensq;
 				dm_x *= halfDrawSize; // dm_x, dm_y are offset to the outer edge of
 				dm_y *= halfDrawSize;
 
@@ -788,11 +548,7 @@ void ArRenderList::AddPolyline(const std::vector<ArVec2>& points, uint32_t color
 				// Average normals
 				float dm_x = (tempNormals[i1].x + tempNormals[i2].x) * 0.5f;
 				float dm_y = (tempNormals[i1].y + tempNormals[i2].y) * 0.5f;
-				{
-					float d2 = dm_x * dm_x + dm_y * dm_y; if (d2 > 0.000001f) {
-						float inv_len2 = 1.0f / d2; if (inv_len2 > 100.0f) inv_len2 = 100.0f; dm_x *= inv_len2; dm_y *= inv_len2;
-					}
-				} (void)0;
+				float d2 = dm_x * dm_x + dm_y * dm_y; if (d2 < 0.5f) d2 = 0.5f; float inv_lensq = 1.0f / d2; dm_x *= inv_lensq; dm_y *= inv_lensq;
 				float dm_out_x = dm_x * (halfInnerThickness + 1.f);
 				float dm_out_y = dm_y * (halfInnerThickness + 1.f);
 				float dm_in_x = dm_x * halfInnerThickness;
@@ -882,18 +638,68 @@ void ArRenderList::AddConvexPolyFilled(const std::vector<ArVec2>& points, uint32
 {
 	if (points.size() < 3 || (color & AR_COL32_A_MASK) == 0)
 		return;
-
-	const bool useAA = ArHasFlag(listFlags, ArRenderListFlag::UseAntiAliasing) && false;
+	const bool useAA = ArHasFlag(listFlags, ArRenderListFlag::UseAntiAliasing);
 	const ArVec2 opaqueUV = sharedData->uvOfWhitInTexture;
 
 	if (useAA)
 	{
+		// copy from imgui
 		const uint32_t colorAlpha = color & ~AR_COL32_A_MASK;
 		const size_t indexCount = (points.size() - 2) * 3 + points.size() * 6;
 		const size_t vertexCount = points.size() * 2;
 		RequireSpace(vertexCount, indexCount);
 
+		uint32_t vertexInnerIdx = (uint32_t)vertices.size();
+		uint32_t vertexOuterIdx = vertexInnerIdx + 1;
+		for (size_t i = 2; i < points.size(); i++)
+		{
+			indices.emplace_back((uint16_t)(vertexInnerIdx));
+			indices.emplace_back((uint16_t)(vertexInnerIdx + ((i - 1) << 1)));
+			indices.emplace_back((uint16_t)(vertexInnerIdx + (i << 1)));
+		}
 
+		// Compute normals
+		std::vector<ArVec2> tempNormals(points.size());
+		for (size_t i0 = points.size() - 1, i1 = 0; i1 < points.size(); i0 = i1++)
+		{
+			const ArVec2& p0 = points[i0];
+			const ArVec2& p1 = points[i1];
+			float dx = p1.x - p0.x;
+			float dy = p1.y - p0.y;
+			{
+				float d2 = dx * dx + dy * dy; if (d2 > 0.0f) {
+					float inv_len = ArRsqrt(d2); dx *= inv_len; dy *= inv_len;
+				}
+			} (void)0;
+			tempNormals[i0].x = dy;
+			tempNormals[i0].y = -dx;
+		}
+
+		for (size_t i0 = points.size() - 1, i1 = 0; i1 < points.size(); i0 = i1++)
+		{
+			// Average normals
+			const ArVec2& n0 = tempNormals[i0];
+			const ArVec2& n1 = tempNormals[i1];
+			float dm_x = (n0.x + n1.x) * 0.5f;
+			float dm_y = (n0.y + n1.y) * 0.5f;
+			{
+				float d2 = dm_x * dm_x + dm_y * dm_y; if (d2 > 0.0f) {
+					float inv_len = ArRsqrt(d2); dm_x *= inv_len; dm_y *= inv_len;
+				}
+			}
+			dm_x *= 0.5f;
+			dm_y *= 0.5f;
+			// Add indexes for fringes
+			indices.emplace_back((uint16_t)(vertexInnerIdx + (i1 << 1)));
+			indices.emplace_back((uint16_t)(vertexInnerIdx + (i0 << 1)));
+			indices.emplace_back((uint16_t)(vertexOuterIdx + (i0 << 1)));
+			indices.emplace_back((uint16_t)(vertexOuterIdx + (i0 << 1)));
+			indices.emplace_back((uint16_t)(vertexOuterIdx + (i1 << 1)));
+			indices.emplace_back((uint16_t)(vertexInnerIdx + (i1 << 1)));
+			// Add vertices
+			vertices.emplace_back(ArVec2(points[i1].x - dm_x, points[i1].y - dm_y), opaqueUV, color);
+			vertices.emplace_back(ArVec2(points[i1].x + dm_x, points[i1].y + dm_y), opaqueUV, colorAlpha);
+		}
 	}
 	else
 	{
@@ -954,8 +760,6 @@ void ArRenderList::AddNewBatch()
 	batch.scissor = currentScissor;
 	batch.indexOffset = indices.size();
 	batch.texture = currentTexture;
-	batch.customPixelShader = currentCustomPixelShader;
-	batch.customVertexShader = currentCustomVertexShader;
 	batches.push_back(batch);
 	currentBatch = &batches.back();
 }
@@ -1196,26 +1000,12 @@ void ArRenderList::PushScissor(ArRect scissor)
 	OnChangedScissor();
 }
 
-void ArRenderList::PushCustomPixelShader(ArCustomShaderID pixel)
-{
-	currentCustomPixelShader = pixel;
-	customPixelShaderStack.push_back(pixel);
-	OnChangedPixelShader();
-}
-
-void ArRenderList::PushCustomVertexShader(ArCustomShaderID vertex)
-{
-	currentCustomVertexShader = vertex;
-	customVertexShaderStack.push_back(vertex);
-	OnChangedVertexShader();
-}
-
 void ArRenderList::PopTexture()
 {
 	if (textureStack.empty())
 		return;
-	textureStack.pop_back();
 	currentTexture = textureStack.empty() ? nullptr : textureStack.back();
+	textureStack.pop_back();
 	OnChangedTexture();
 }
 
@@ -1223,48 +1013,19 @@ void ArRenderList::PopScissor()
 {
 	if (scissorStack.empty())
 		return;
-	scissorStack.pop_back();
 	currentScissor = scissorStack.empty() ? ArRect() : scissorStack.back();
+	scissorStack.pop_back();
 	OnChangedScissor();
-}
-
-void ArRenderList::PopCustomVertexShader()
-{
-	if (customVertexShaderStack.empty())
-		return;
-	customVertexShaderStack.pop_back();
-	currentCustomVertexShader = customVertexShaderStack.empty() ? nullptr : customVertexShaderStack.back();
-	OnChangedVertexShader();
-}
-
-void ArRenderList::PopCustomPixelShader()
-{
-	if (customPixelShaderStack.empty())
-		return;
-	customPixelShaderStack.pop_back();
-	currentCustomPixelShader = customPixelShaderStack.empty() ? nullptr : customPixelShaderStack.back();
-	OnChangedPixelShader();
 }
 
 void ArRenderList::RequireSpace(size_t vertexCount, size_t indexCount)
 {
 	currentBatch->indexCount += (uint32_t)indexCount;
-
-	if (vertices.size() + vertexCount > vertices.capacity())
-	{
-		const size_t newSize = ArMax(vertices.size() + vertexCount, vertices.capacity() * 2);
-		vertices.reserve(newSize);
-	}
-	if (indices.size() + indexCount > indices.capacity())
-	{
-		const size_t newSize = ArMax(indices.size() + indexCount, indices.capacity() * 2);
-		indices.reserve(newSize);
-	}
 }
 
 void ArRenderList::OnChangedTexture()
 {
-	if (!currentBatch->indexCount != 0 && currentBatch->texture != currentTexture)
+	if (currentBatch->indexCount != 0 && currentBatch->texture != currentTexture)
 	{
 		AddNewBatch();
 		return;
@@ -1282,26 +1043,6 @@ void ArRenderList::OnChangedScissor()
 	currentBatch->scissor = currentScissor;
 }
 
-void ArRenderList::OnChangedVertexShader()
-{
-	if (currentBatch->indexCount != 0 && currentBatch->customVertexShader != currentCustomVertexShader)
-	{
-		AddNewBatch();
-		return;
-	}
-	currentBatch->customVertexShader = currentCustomVertexShader;
-}
-
-void ArRenderList::OnChangedPixelShader()
-{
-	if (currentBatch->indexCount != 0 && currentBatch->customPixelShader != currentCustomPixelShader)
-	{
-		AddNewBatch();
-		return;
-	}
-	currentBatch->customPixelShader = currentCustomPixelShader;
-}
-
 int ArRenderList::CalcCircleAutoSegmentCount(float radius) const
 {
 	const int radius_idx = (int)(radius + 0.999999f); // ceil to never reduce accuracy
@@ -1310,6 +1051,260 @@ int ArRenderList::CalcCircleAutoSegmentCount(float radius) const
 	else
 		return ArClamp((((((int)ceilf(AR_PI / acosf(1 - ArMin((sharedData->circleSegmentMaxError), (radius)) / (radius)))) + 1) / 2) * 2), 4, 512);
 }
+
+// ---------------------------------------------------------- //
+// !. ArTextureAtlas implementation
+// ---------------------------------------------------------- //
+
+void ArTextureAtlas::OnDestroy(IArgonRenderer* renderer)
+{
+	if (pixels)
+	{
+		delete[] pixels;
+		pixels = nullptr;
+	}
+	dirty = false;
+	renderer->ReleaseTexture(textureId);
+}
+
+// ---------------------------------------------------------- //
+// !. ArFontFace implementation
+// ---------------------------------------------------------- //
+
+ArFontFace::GlyphInfo* ArFontFace::GetGlyphNoFallback(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
+{
+	ArFontFace::GlyphInfo* glyphInfo = FindGlyph(codepoint, size, flags);
+	if (glyphInfo)
+		return glyphInfo;
+	return nullptr;
+}
+
+ArFontFace::GlyphInfo* ArFontFace::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
+{
+	ArFontFace::GlyphInfo* glyphInfo = FindGlyph(codepoint, size, flags);
+	if (glyphInfo)
+		return glyphInfo;
+	return fallbackGlyph;
+}
+
+ArFontFace::GlyphInfo* ArFontFace::FindGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
+{
+	GlyphCacheKey key = GlyphCacheKey(codepoint, size, flags);
+	auto it = glyphs.find(key);
+	if (it != glyphs.end())
+		return &it->second;
+	if (!textureManager.glyphParser->HasGlyph(fontId, codepoint))
+		return nullptr;
+	auto parserResult = textureManager.glyphParser->ParseGlyph(*this, key);
+	if (!parserResult.has_value())
+		return nullptr;
+	glyphs[key] = parserResult->glyphInfo;
+	mappingQueue.emplace(key, parserResult->pixels);
+	return &glyphs[key];
+}
+
+void ArFontFace::Awake()
+{
+	fallbackGlyph = TryGetGlyph(u'\xFFFD', 16u, ArGlyphFlag::None);
+	if (!fallbackGlyph)
+		fallbackGlyph = TryGetGlyph('?', 16u, ArGlyphFlag::None);
+	if (!fallbackGlyph)
+		fallbackGlyph = TryGetGlyph(' ', 16u, ArGlyphFlag::None);
+}
+
+void ArFontFace::EndFrame()
+{
+	while (!mappingQueue.empty())
+	{
+		GlyphMappingTask& task = mappingQueue.front();
+		mappingQueue.pop();
+		auto it = glyphs.find(task.key);
+		if (it == glyphs.end())
+			continue;
+		ArFontFace::GlyphInfo& glyphInfo = it->second;
+
+		ArTextureManager::Territory territory = textureManager.AllocateTerritory((int)glyphInfo.size.x, (int)glyphInfo.size.y);
+		if (!territory.IsValid())
+			continue;
+		ArTextureAtlas& atlas = textureManager.atlases[territory.atlasIndex];
+
+		glyphInfo.textureAtlasIndex = territory.atlasIndex;
+
+		for (int y = 0; y < territory.size.y; y++)
+		{
+			unsigned int* write_ptr = &atlas.pixels[territory.position.x + ((territory.position.y + y) * atlas.atlasSize.x)];
+			for (int x = 0; x < territory.size.x; x++)
+			{
+				*(write_ptr + x) = task.pixels[x + y * territory.size.x];
+			}
+		}
+
+		delete[] task.pixels;
+
+		glyphInfo.uv = ArRect(
+			(float)(territory.position.x) * atlas.uvScale.x,
+			(float)(territory.position.y) * atlas.uvScale.y,
+			(float)(territory.position.x + territory.size.x) * atlas.uvScale.x,
+			(float)(territory.position.y + territory.size.y) * atlas.uvScale.y);
+		atlas.dirty = true;
+	}
+}
+
+// ---------------------------------------------------------- //
+// !. ArTextureManager implementation
+// ---------------------------------------------------------- //
+
+void ArTextureManager::Awake(ArRenderListSharedData& sharedData)
+{
+	BuildBaseTerritories(sharedData);
+
+	for (auto& fontFace : fontFaces)
+	{
+		fontFace.Awake();
+	}
+}
+
+void ArTextureManager::StartFrame()
+{
+	while (!fontFaceQueryQueue.empty())
+	{
+		FontFaceQuery& query = fontFaceQueryQueue.front();
+		auto result = glyphParser->InitFontFace((uint8_t*)query.fontBinary, query.binarySize);
+		fontFaceQueryQueue.pop();
+		if (!result.has_value())
+			continue;
+		fontFaces.emplace_back(*this, result->fontId, result->name);
+	}
+}
+
+void ArTextureManager::EndFrame(ArRenderListSharedData& sharedData)
+{
+	for (auto& fontFace : fontFaces)
+	{
+		fontFace.EndFrame();
+	}
+}
+
+ArTextureManager::Territory ArTextureManager::AllocateTerritory(int width, int height)
+{
+	if (width <= 0 || height <= 0)
+		return {};
+
+	stbrp_rect rect = {};
+	rect.w = width;
+	rect.h = height;
+
+	auto atlasIt = atlases.begin();
+
+	Territory territory = Territory();
+	territory.size = ArIntVec2(width, height);
+	do
+	{
+		if (atlasIt == atlases.end())
+		{
+			atlases.emplace_back();
+			atlasIt = std::prev(atlases.end());
+		}
+		auto& atlas = *atlasIt;
+
+		if (stbrp_pack_rects(&atlas.rectPackerContext, &rect, 1))
+		{
+			territory.atlasIndex = int(atlasIt - atlases.begin());
+			territory.position = ArIntVec2(rect.x, rect.y);
+			break;
+		}
+
+		atlasIt++;
+	} while (!rect.was_packed);
+	territories.push_back(territory);
+	return territory;
+}
+
+ArFontFace::GlyphInfo* ArTextureManager::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags) const
+{
+	for (auto& fontFace : fontFaces)
+	{
+		ArFontFace::GlyphInfo* glyphInfo = fontFace.GetGlyphNoFallback(codepoint, size, flags);
+		if (glyphInfo)
+			return glyphInfo;
+	}
+	return nullptr;
+}
+
+std::vector<ArFontFace::GlyphInfo*> ArTextureManager::TryGetGlyphs(ArStringView text, uint32_t size, ArGlyphFlag flags) const
+{
+	std::vector<uint32_t> codePoints = ArHelp::Utf8::DecodeToCodepoints(text);
+	std::vector<ArFontFace::GlyphInfo*> glyphInfos;
+	glyphInfos.reserve(codePoints.size());
+	for (auto& code : codePoints)
+	{
+		glyphInfos.push_back(TryGetGlyph(code, size, flags));
+	}
+	return glyphInfos;
+}
+
+ArVec2 ArTextureManager::CalcTextSize(ArStringView text, uint32_t size, ArGlyphFlag flags) const
+{
+	std::vector<ArFontFace::GlyphInfo*> glyphInfos = TryGetGlyphs(text, size, flags);
+	ArVec2 textSize = ArVec2(0, 0);
+	for (auto& glyphInfo : glyphInfos)
+	{
+		if (!glyphInfo)
+			continue;
+		textSize.x += glyphInfo->advanceX;
+		textSize.y = ArMax(textSize.y, glyphInfo->size.y);
+	}
+	ArVec2 padding = ArVec2(0.5f, 0.5f);
+	textSize.x += padding.x * 2;
+	textSize.y += padding.y * 2;
+	textSize.x = ArMax(textSize.x, 1.0f);
+	textSize.y = ArMax(textSize.y, 1.0f);
+	return textSize;
+}
+
+void ArTextureManager::BuildBaseTerritories(ArRenderListSharedData& sharedData)
+{
+	buildedBaseTerritories = true;
+
+	Territory antiAliasingGlyph = AllocateTerritory(64, 64);
+	ArTextureAtlas& atlas = atlases[0];
+	for (int n = 0; n < 64; n++)
+	{
+		unsigned int y = n;
+		unsigned int line_width = n;
+		unsigned int pad_left = (antiAliasingGlyph.size.x - line_width) / 2;
+		unsigned int pad_right = antiAliasingGlyph.size.x - (pad_left + line_width);
+
+
+		unsigned int* write_ptr = &atlas.pixels[antiAliasingGlyph.position.x + ((antiAliasingGlyph.position.y + y) * atlas.atlasSize.x)];
+		for (unsigned int i = 0; i < pad_left; i++)
+			*(write_ptr + i) = AR_COL32(255, 255, 255, 0);
+
+		for (unsigned int i = 0; i < line_width; i++)
+			*(write_ptr + pad_left + i) = AR_COL32_WHITE;
+
+		for (unsigned int i = 0; i < pad_right; i++)
+			*(write_ptr + pad_left + line_width + i) = AR_COL32(255, 255, 255, 0);
+
+		ArVec2 uv0 = ArVec2((float)(antiAliasingGlyph.position.x + pad_left - 1), (float)(antiAliasingGlyph.position.y + y)) * atlas.uvScale;
+		ArVec2 uv1 = ArVec2((float)(antiAliasingGlyph.position.x + pad_left + line_width + 1), (float)(antiAliasingGlyph.position.y + y + 1)) * atlas.uvScale;
+		float half_v = (uv0.y + uv1.y) * 0.5f;
+		sharedData.uvOfBakeLines[n] = ArVec4(uv0.x, half_v, uv1.x, half_v);
+	}
+
+	Territory whitePixel = AllocateTerritory(2, 2);
+	for (int y = 0; y < whitePixel.size.y; y++)
+	{
+		unsigned int* write_ptr = &atlas.pixels[whitePixel.position.x + ((whitePixel.position.y + y) * atlas.atlasSize.x)];
+		for (int x = 0; x < whitePixel.size.x; x++)
+			*(write_ptr + x) = AR_COL32_WHITE;
+	}
+	sharedData.uvOfWhitInTexture = ArVec2(whitePixel.position.x + 0.5f, whitePixel.position.y + 0.5f) * atlas.uvScale;
+}
+
+// ---------------------------------------------------------- //
+// !. ArgonRenderManager implementation
+// ---------------------------------------------------------- //
 
 void ArgonRenderManager::AddFontFromCompressed(void* data, size_t size)
 {
@@ -1404,15 +1399,3 @@ ArTextureID ArgonRenderManager::GetDefaultTexture() const
 
 	return textureManager.atlases[0].GetTexture();
 }
-
-// TODO:
-// 1.编写装箱算法库					[*] -> 使用stb_rect_pack.h
-// 2.完成对纹理渲染的支持				[*]
-//		-- 支持纹理采样渲染			[*]
-//		-- 渲染一张图片				[*]
-// 3.重整RenderList渲染流程			[*]
-// 4.抗锯齿							[*]
-//		-- 完成纹理Atlas的设计和编写	[*]
-// 6.完成对字体渲染的支持				[*]
-//		-- 将字体位图添加到纹理Atlas中	[*]
-//		-- RenderList添加文字渲染		[*]

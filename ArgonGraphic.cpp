@@ -1,5 +1,21 @@
-#include "ArgonCore.h"
+﻿#include "ArgonCore.h"
 #include <stack>
+
+// ---------------------------------------------------------- //
+// !. ArgonGraphicElement Implementation
+// ---------------------------------------------------------- //
+
+ArGraphicElement::~ArGraphicElement()
+{
+	for (auto& [_, component] : componentMap) 
+	{ 
+		for (auto& c : component) delete c; 
+	} 
+	componentMap.clear(); 
+	for (auto& child : children) 
+		delete child; 
+	children.clear();
+}
 
 void ArGraphicElement::Awaken(ArgonContext& context)
 {
@@ -13,17 +29,19 @@ void ArGraphicElement::Awaken(ArgonContext& context)
 		child->boundingBox.position = boundingBox.position + boundingBox.localPosition;
 		child->Awaken(context);
 	}
-	for (auto& [typeIndex, component] : componentMap)
+	for (auto& [typeIndex, components] : componentMap)
 	{
-		component->Awake(*this);
+		for (auto& component : components)
+		{
+			component->Awake(*this);
+		}
 	}
 }
 
 void ArGraphicElement::StartFrame(ArgonContext& context)
 {
-	if (!visible)
-		return;
-	renderList = context.renderManager.AllocationRenderList<ArGraphicRenderList>(this);
+	if (visible)
+		renderList = context.renderManager.AllocationRenderList<ArGraphicRenderList>(this);
 
 	OnUpdate(context);
 	if (focusing && context.graphicManager.focusingElement != this)
@@ -37,9 +55,12 @@ void ArGraphicElement::StartFrame(ArgonContext& context)
 		child->boundingBox.position = boundingBox.position + boundingBox.localPosition;
 		child->StartFrame(context);
 	}
-	for (auto& [_, component] : componentMap)
+	for (auto& [_, components] : componentMap)
 	{
-		component->OnUpdate(*this, context);
+		for (auto& component : components)
+		{
+			component->OnUpdate(*this, context);
+		}
 	}
 }
 
@@ -62,9 +83,12 @@ void ArGraphicElement::EndFrame(ArgonContext& context)
 	{
 		child->EndFrame(context);
 	}
-	for (auto& [_, component] : componentMap)
+	for (auto& [_, components] : componentMap)
 	{
-		component->OnRender(*this);
+		for (auto& component : components)
+		{
+			component->OnRender(*this);
+		}
 	}
 }
 
@@ -94,15 +118,17 @@ int ArGraphicElement::FindMostDeepestChild() const
 
 void ArGraphicElement::AddComponent(std::type_index typeIndex, IArGraphicComponent* component)
 {
-	componentMap[typeIndex] = component;
+	componentMap[typeIndex].push_back(component);
 }
 
-IArGraphicComponent* ArGraphicElement::GetComponent(std::type_index typeIndex)
+IArGraphicComponent* ArGraphicElement::GetComponent(std::type_index typeIndex, size_t index)
 {
 	auto it = componentMap.find(typeIndex);
 	if (it != componentMap.end())
 	{
-		return it->second;
+		if (index < 0 || index >= it->second.size())
+			return nullptr;
+		return it->second[index];
 	}
 	return nullptr;
 }
@@ -132,6 +158,10 @@ ArGraphicElement* ArGraphicElement::GetChild(size_t index) const
 	return *it;
 }
 
+// ---------------------------------------------------------- //
+// !. ArgonGraphicPrimRenderListElement Implementation
+// ---------------------------------------------------------- //
+
 void ArGraphicPrimRenderListElement::Awake(const ArgonContext& context)
 {
 	interactive = false;
@@ -142,6 +172,10 @@ void ArGraphicPrimRenderListElement::OnUpdate(const ArgonContext& context)
 {
 	boundingBox.size = context.inputManager.GetDisplayState().size;
 }
+
+// ---------------------------------------------------------- //
+// !. ArgonGraphicLayer Implementation
+// ---------------------------------------------------------- //
 
 ArGraphicLayer::~ArGraphicLayer()
 {
@@ -239,7 +273,7 @@ ArGraphicElement* ArGraphicLayer::HitTest(const ArVec2& pos) const
 		ArGraphicElement* element = stack.top();
 		stack.pop();
 
-		if (!element->interactive || element->dead)
+		if (!element->interactive || element->dead || !element->visible)
 			continue;
 
 		if (!element->HitTest(pos))
@@ -291,6 +325,10 @@ void ArGraphicLayer::UnlockFocus()
 	lockFocus = false;
 }
 
+// ---------------------------------------------------------- //
+// !. ArgonGraphicManager Implementation
+// ---------------------------------------------------------- //
+
 ArgonGraphicManager::~ArgonGraphicManager()
 {
 	for (ArGraphicLayer* layer : layers)
@@ -308,6 +346,8 @@ void ArgonGraphicManager::Awake()
 
 void ArgonGraphicManager::StartFrame(ArgonContext& context)
 {
+	bool foundFocus = false;
+	bool foundHover = false;
 	for (auto it = layers.rbegin(); it != layers.rend(); ++it)
 	{
 		ArGraphicLayer* layer = *it;
@@ -315,10 +355,24 @@ void ArgonGraphicManager::StartFrame(ArgonContext& context)
 		if (!layer->focusingElement && !layer->hoveringElement)
 			continue;
 		if (layer->focusingElement)
+		{
+			foundFocus = true;
 			focusingElement = layer->focusingElement;
+		}
 		if (layer->hoveringElement)
+		{
+			foundHover = true;
 			hoveringElement = layer->hoveringElement;
+		}
 		break;
+	}
+	if (!foundFocus)
+	{
+		focusingElement = nullptr;
+	}
+	if (!foundHover)
+	{
+		hoveringElement = nullptr;
 	}
 
 	for (ArGraphicLayer* layer : layers)
@@ -335,13 +389,115 @@ void ArgonGraphicManager::EndFrame(ArgonContext& context)
 	}
 }
 
-ArGraphicLayer* ArgonGraphicManager::AddLayer()
+ArGraphicLayer* ArgonGraphicManager::AddLayer(ArLayerAdditionPriority priority)
 {
-	// push the new layer to the position between the default and foreground layer
 	ArGraphicLayer* newLayer = new ArGraphicLayer;
-	layers.reserve(layers.size() + 1);
-	layers.resize(layers.size() - 1);
-	layers.push_back(newLayer);
-	layers.push_back(foregroundLayer);
+	// 1.find the position
+	ArGraphicLayer* baseLayer = nullptr;
+	int offset = 0;
+	switch (priority)
+	{
+	case ArLayerAdditionPriority::BeforeDefault:
+		baseLayer = defaultLayer;
+		offset = 0;
+		break;
+	case ArLayerAdditionPriority::AfterDefault:
+		baseLayer = defaultLayer;
+		offset = 1;
+		break;
+	case ArLayerAdditionPriority::AfterBackground:
+		baseLayer = backgroundLayer;
+		offset = 1;
+		break;
+	case ArLayerAdditionPriority::BeforeForeground:
+		baseLayer = foregroundLayer;
+		offset = 0;
+		break;
+	case ArLayerAdditionPriority::None:
+		return defaultLayer;
+	}
+	const auto& baseIt = std::find(layers.begin(), layers.end(), baseLayer);
+	// 2. push the new layer to the position
+	layers.insert(baseIt + offset, newLayer);
 	return newLayer;
+}
+
+// ---------------------------------------------------------- //
+// !. Basic Components Implementation
+// ---------------------------------------------------------- //
+
+void ArGFloatAnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+{
+	if (!processing)
+		return;
+	if (spentTime >= length)
+	{
+		processing = false;
+		spentTime = 0ms;
+		value = endPoint;
+		return;
+	}
+	spentTime += context.GetDeltaTimeInArDuration();
+	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
+}
+
+void ArGFloatAnimatorComp::StartNewProcess(float start, float end, ArDuration length)
+{
+	processing = true;
+	spentTime = 0ms;
+	startPoint = start;
+	endPoint = end;
+	this->length = length;
+}
+
+void ArGVec2AnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+{
+	if (!processing)
+		return;
+	if (spentTime >= length)
+	{
+		processing = false;
+		spentTime = 0ms;
+		value = endPoint;
+		return;
+	}
+	spentTime += context.GetDeltaTimeInArDuration();
+	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
+}
+
+void ArGVec2AnimatorComp::StartNewProcess(ArVec2 start, ArVec2 end, ArDuration length)
+{
+	processing = true;
+	spentTime = 0ms;
+	startPoint = start;
+	endPoint = end;
+	this->length = length;
+}
+
+bool ArGPolygonCollisionComp::IsInBounds(ArVec2 pos)
+{
+	if (!working)
+		return false;
+	bool inside = false;
+	size_t n = bounds.size();
+
+	for (size_t i = 0, j = n - 1; i < n; j = i++)
+	{
+		bool intersect = ((bounds[i].y > pos.y) != (bounds[j].y > pos.y)) &&
+			(pos.x < (bounds[j].x - bounds[i].x) * (pos.y - bounds[i].y) / (bounds[j].y - bounds[i].y) + bounds[i].x);
+
+		if (intersect)
+			inside = !inside;
+	}
+
+	return inside;
+}
+
+void ArGPolygonCollisionComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+{
+	if (!working)
+		return;
+	const ArgonInputManager& inputManager = context.inputManager;
+	ArVec2 currentMousePos = inputManager.GetMousePosition() - owner.boundingBox.GetActualPosition();
+	hovering = IsInBounds(currentMousePos);
 }

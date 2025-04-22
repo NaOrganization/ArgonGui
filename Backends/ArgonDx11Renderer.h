@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "../ArgonCore.h"
 #include <d3d11.h>
 
@@ -7,28 +7,28 @@ class ArDx11Buffer final
 public:
 	ID3D11Buffer* buffer = nullptr;
 private:
-	uint32_t currentSize = 0;
+	size_t currentSize = 0;
 	const D3D11_USAGE usage = D3D11_USAGE_DEFAULT;
 	const uint32_t bindFlags = D3D11_BIND_VERTEX_BUFFER;
 	const uint32_t cpuAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	const uint32_t miscFlags = 0;
 public:
-	ArDx11Buffer(const uint32_t& defaultSize, const D3D11_USAGE& usage, const uint32_t& bindFlags, const uint32_t& cpuAccessFlags = D3D11_CPU_ACCESS_WRITE, const uint32_t& miscFlags = 0)
+	ArDx11Buffer(const size_t& defaultSize, const D3D11_USAGE& usage, const uint32_t& bindFlags, const uint32_t& cpuAccessFlags = D3D11_CPU_ACCESS_WRITE, const uint32_t& miscFlags = 0)
 		: currentSize(defaultSize), usage(usage), bindFlags(bindFlags), cpuAccessFlags(cpuAccessFlags), miscFlags(miscFlags) {}
 
 	~ArDx11Buffer() { Release(); }
 
 	bool IsCreated() const { return buffer != nullptr; }
 
-	uint32_t Size() const { return currentSize; }
+	size_t Size() const { return currentSize; }
 
 	bool Create(ID3D11Device* device);
 
 	void Release();
 
-	bool Resize(uint32_t newSize, ID3D11Device* device);
+	bool Resize(size_t newSize, ID3D11Device* device);
 
-	bool Expand(uint32_t size, ID3D11Device* device);
+	bool Expand(size_t size, ID3D11Device* device);
 };
 
 class ArDx11RendererConfig final : public IArRendererConfig
@@ -53,9 +53,9 @@ public:
 public:
 	ShaderType shaderType = ShaderType::None;
 	std::string shaderCode = "";
-	std::string shaderModel = "vs_5_0";
+	std::string shaderModel = "";
 public:
-	ArDx11RenderCustomCreateConfig(ShaderType shaderType, const std::string& shaderCode, const std::string& entryPoint, const std::string& shaderModel)
+	ArDx11RenderCustomCreateConfig(ShaderType shaderType, const std::string& shaderCode, const std::string& shaderModel)
 		: shaderType(shaderType), shaderCode(shaderCode), shaderModel(shaderModel) {}
 };
 
@@ -71,14 +71,19 @@ private:
 	ArDx11Buffer vertexBuffer = ArDx11Buffer(0x1400 * sizeof(ArVertex), D3D11_USAGE_DYNAMIC, D3D11_BIND_VERTEX_BUFFER);
 	ArDx11Buffer indexBuffer = ArDx11Buffer(0x2800 * sizeof(uint16_t), D3D11_USAGE_DYNAMIC, D3D11_BIND_INDEX_BUFFER);
 	ArDx11Buffer vertexConstantBuffer = ArDx11Buffer(sizeof(float[4][4]), D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER);
+	ArDx11Buffer vertexShaderParmsBuffer = ArDx11Buffer(32, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER);
+	ArDx11Buffer pixelShaderParmsBuffer = ArDx11Buffer(32, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER);
 
-	ID3D11PixelShader* pixelShader = nullptr;
-	ID3D11VertexShader* vertexShader = nullptr;
+	ID3D11PixelShader* defualtPixelShader = nullptr;
+	ID3D11VertexShader* defualtVertexShader = nullptr;
 	ID3D11InputLayout* inputLayout = nullptr;
 	ID3D11RasterizerState* rasterizerState = nullptr;
 	ID3D11BlendState* blendState = nullptr;
 	ID3D11DepthStencilState* depthStencilState = nullptr;
 	ID3D11SamplerState* samplerState = nullptr;
+
+	ID3D11PixelShader* currentPixelShader = nullptr;
+	ID3D11VertexShader* currentVertexShader = nullptr;
 
 	std::unordered_map<ArTextureID, ID3D11Texture2D*> textures = {};
 public:
@@ -96,11 +101,19 @@ public:
 
 	ArTextureID CreateTexture(ArIntVec2 size, const void* pixels) override;
 
-	ArCustomShaderID CreateCustomShader(const IArRenderCustomCreateConfig& config) override;
+	ArShaderID CreateCustomShader(const IArRenderCustomCreateConfig& config) override;
+
+	void SetCurrentVertexShader(ArShaderID shader) override;
+
+	bool SetVertexShaderConstantBuffer(const void* data, size_t size) override;
+
+	void SetCurrentPixelShader(ArShaderID shader) override;
+
+	bool SetPixelShaderConstantBuffer(const void* data, size_t size) override;
 
 	void ReleaseTexture(ArTextureID texture) override;
 
-	void ReleaseCustomShader(ArCustomShaderID shader) override;
+	void ReleaseCustomShader(ArShaderID shader) override;
 
 	void Present(const ArgonRenderManager& renderManager, const ArDisplayState& displayState) override;
 

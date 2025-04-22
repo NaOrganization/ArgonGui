@@ -1,4 +1,4 @@
-#include "ArgonWin32Platform.h"
+﻿#include "ArgonWin32Platform.h"
 #include "../ArgonCore.h"
 #include "windowsx.h"
 #include "xinput.h"
