@@ -44,7 +44,7 @@ vcpkg install freetype:x86-windows
 目前还没有提供包管理集成（比如 vcpkg/conan），但你可以直接将 `ArgonGui` 作为子模块加入项目：
 
 ```bash
-git submodule add https://github.com/yourusername/ArgonGui
+git submodule add https://github.com/NaOrganization/ArgonGui
 ```
 
 编译要求：
