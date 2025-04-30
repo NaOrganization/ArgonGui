@@ -59,11 +59,11 @@ bool ArgonDx11Renderer::Awake(const IArRendererConfig& config)
 
 void ArgonDx11Renderer::StartFrame(const ArgonRenderManager& renderManager)
 {
-	for (auto& atlas : renderManager.textureManager.atlases)
+	for (auto& land : renderManager.lands)
 	{
-		if (atlas.Ready())
+		if (land.Ready())
 			continue;
-		atlas.textureId = CreateTextureInternal(atlas.atlasSize, atlas.pixels, D3D11_USAGE_DYNAMIC, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_WRITE, 0, true);
+		land.textureId = CreateTextureInternal(land.size, land.pixels, D3D11_USAGE_DYNAMIC, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_WRITE, 0, true);
 	}
 }
 
@@ -120,22 +120,23 @@ void ArgonDx11Renderer::EndFrame(const ArgonRenderManager& renderManager, const 
 		deviceContext->Unmap(vertexConstantBuffer.buffer, 0);
 	}
 
-	// Update font atlases
+	// Update font lands
 	{
-		for (auto& atlas : renderManager.textureManager.atlases)
+		for (auto& land : renderManager.lands)
 		{
-			if (!atlas.Ready() || !atlas.dirty)
+			if (!land.Ready() || !land.dirty)
 				continue;
-			ID3D11Texture2D* texture = textures[atlas.textureId];
+
+			ID3D11Texture2D* texture = textures[land.textureId];
 			if (!texture)
 				continue;
 			D3D11_MAPPED_SUBRESOURCE mappedResource = {};
 			if (deviceContext->Map(texture, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource) != S_OK)
 				continue;
-			std::copy(atlas.pixels, atlas.pixels + (atlas.atlasSize.x * atlas.atlasSize.y), (unsigned int*)mappedResource.pData);
+			std::copy(land.pixels, land.pixels + (land.size.x * land.size.y), (uint32_t*)mappedResource.pData);
 			deviceContext->Unmap(texture, 0);
 
-			atlas.dirty = false;
+			land.dirty = false;
 		}
 	}
 }

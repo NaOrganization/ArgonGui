@@ -1,99 +1,272 @@
 ﻿#pragma once
-#include <ArgonCore.h>
+#include <ArgonGui.h>
 
-class SnowFlakeManager final : public ArGraphicElement
+class ArGDroppableComp : public IArGraphicComponent
 {
 private:
-	class SnowFlake : public ArGraphicElement
+	bool isDragging = false;
+	ArVec2 dragOffset = ArVec2(0.f, 0.f);
+	ArGraphicElement* rootElement = nullptr;
+public:
+	void Awake(ArGraphicElement& owner) override
 	{
-	public:
-		float fallSpeed = 0.f;
-		float size = 0.f;
-		float rotation = 0.f;
-		float rotationSpeed = 0.f;
-		float alpha = 0.f;
-		float meltingSpeed = 0.f;
+		rootElement = owner.GetRootElement();
+	}
 
-		std::vector<ArVec2> points = std::vector<ArVec2>(4);
-
-		SnowFlake(float fallSpeed, float size, float rotation, float rotationSpeed, float alpha, float meltingSpeed = 0.f) :
-			fallSpeed(fallSpeed), size(size), rotation(rotation), rotationSpeed(rotationSpeed), alpha(alpha), meltingSpeed(meltingSpeed) {
-		}
-
-		void Awake(const ArgonContext& context) override
+	void OnUpdate(ArGraphicElement& owner, const ArgonContext& context) override
+	{
+		if (!owner.focusing || !owner.hovered)
+			return;
+		const ArgonInputManager& inputManager = context.inputManager;
+		ArVec2 currentMousePos = inputManager.GetMousePosition();
+		if (inputManager.IsMouseButtonDown(ArMouseButton::Left))
 		{
-			interactive = false;
-
-			boundingBox.position.x = ArHelp::Random::GetFloat(0.f, context.inputManager.GetDisplayState().size.x);
-			boundingBox.position.y = -10.f;
-			boundingBox.size = ArVec2(size, size);
+			isDragging = true;
+			dragOffset = currentMousePos - rootElement->boundingBox.GetActualPosition();
+			owner.layer->LockFocus();
 		}
-
-		void OnUpdate(const ArgonContext& context) override
+		if (!isDragging)
+			return;
+		if (!inputManager.IsMouseButtonHeld(ArMouseButton::Left))
 		{
-			dead = (boundingBox.position.y >= context.inputManager.GetDisplayState().size.y) || alpha <= 0.f;
-
-			rotation += rotationSpeed * context.GetDeltaTime();
-
-			alpha -= meltingSpeed * context.GetDeltaTime();
-
-			ArVec2 mousePos = context.inputManager.GetMousePosition();
-
-			float distance = (mousePos - boundingBox.position).Length();
-			if (distance <= 100.f)
-				boundingBox.position += (mousePos - boundingBox.position).Normalized() * fallSpeed * context.GetDeltaTime();
-			else
-				boundingBox.position.y += fallSpeed * context.GetDeltaTime();
-
-			// 绕中心旋转
-			ArVec2 center = boundingBox.GetRect().GetCenter();
-			//sin, cos
-			float sin = sinf(rotation);
-			float cos = cosf(rotation);
-			points[0] = center + ArVec2(-size / 2.f * cos - size / 2.f * sin, -size / 2.f * sin + size / 2.f * cos);
-			points[1] = center + ArVec2(size / 2.f * cos - size / 2.f * sin, size / 2.f * sin + size / 2.f * cos);
-			points[2] = center + ArVec2(size / 2.f * cos + size / 2.f * sin, size / 2.f * sin - size / 2.f * cos);
-			points[3] = center + ArVec2(-size / 2.f * cos + size / 2.f * sin, -size / 2.f * sin - size / 2.f * cos);
+			isDragging = false;
+			dragOffset = ArVec2(0.f, 0.f);
+			owner.layer->UnlockFocus();
+			return;
 		}
+		rootElement->boundingBox.position = currentMousePos - dragOffset;
+	}
+};
 
-		void OnRender(const ArgonContext& context) override
-		{
-			if (dead)
-				return;
+class ArGResizableElement : public ArGraphicElement
+{
+private:
+	bool isResizing = false;
+	ArVec2 dragOffset = ArVec2(0.f, 0.f);
 
-			renderList->AddConvexPolyFilled(points,
-				AR_COL32(255.f, 255.f, 255.f, alpha)
-			);
-		}
-	};
+	ArVec2 minSize = {};
+	ArGPolygonCollisionComp* mouseCollision = nullptr;
 public:
-	float deltaTimeAccumulator = 0.f;
-	uint32_t snowfallCountPerHalfSecond = 10;
-public:
+	ArGResizableElement(ArVec2 minSize) : minSize(minSize) {}
+
 	void Awake(const ArgonContext& context) override
 	{
-		interactive = focusable = visible = false;
+		depth = root->FindMostDeepestChild() + 1;
+		const float padding = 3.f;
+		const float size = 10.f;
+		const float size2 = 3.f;
+		boundingBox.size = ArVec2(size, size);
+
+		owner->boundingBox.size.AddObserver([this, padding](const ArVec2& size) {
+			boundingBox.localPosition = ArVec2(
+				size.x - boundingBox.size->x - padding,
+				size.y - boundingBox.size->y - padding
+			);
+			});
+
+		mouseCollision = new ArGPolygonCollisionComp(std::vector<ArVec2>({
+			ArVec2(size, size),
+			ArVec2(0.f, size),
+			ArVec2(0.f, size - size2),
+			ArVec2(size - size2, size - size2),
+			ArVec2(size - size2, 0.f),
+			ArVec2(size, 0.f),
+			}));
+		AddComponent(typeid(ArGPolygonCollisionComp), mouseCollision);
 	}
 
 	void OnUpdate(const ArgonContext& context) override
 	{
-		deltaTimeAccumulator += ArGui::GetContext().GetDeltaTime();
-		if (deltaTimeAccumulator >= 0.5f)
-		{
-			deltaTimeAccumulator = 0.f;
+		if (!focusing || !hovered)
+			return;
 
-			for (size_t i = 0; i < snowfallCountPerHalfSecond; i++)
-			{
-				float fallSpeed = ArHelp::Random::GetFloat(50.f, 100.f);
-				float size = ArHelp::Random::GetFloat(5.f, 15.f);
-				float rotation = ArHelp::Random::GetFloat(0.f, 2 * AR_PI);
-				float rotationSpeed = ArHelp::Random::GetFloat(-1.f, 1.f);
-				float alpha = ArHelp::Random::GetFloat(100.f, 255.f);
-				float meltingSpeed = ArHelp::Random::GetFloat(0.f, 50.f);
-				layer->AddElement(new SnowFlake(fallSpeed, size, rotation, rotationSpeed, alpha, meltingSpeed));
-			}
+		const ArgonInputManager& inputManager = context.inputManager;
+		ArVec2 currentMousePos = inputManager.GetMousePosition();
+		if (mouseCollision->hovering)
+		{
+			if (!inputManager.IsMouseButtonDown(ArMouseButton::Left))
+				return;
+			isResizing = true;
+			dragOffset = currentMousePos - *owner->boundingBox.size;
+			layer->LockFocus();
+		}
+		if (!isResizing)
+			return;
+		if (!inputManager.IsMouseButtonHeld(ArMouseButton::Left))
+		{
+			isResizing = false;
+			dragOffset = ArVec2(0.f, 0.f);
+			layer->UnlockFocus();
+			return;
+		}
+		owner->boundingBox.size = ArMax(minSize, currentMousePos - dragOffset);
+	}
+
+	void OnRender(const ArgonContext& context) override
+	{
+		std::vector<ArVec2> bounds = mouseCollision->bounds;
+		for (auto& point : bounds)
+		{
+			point += boundingBox.GetActualPosition();
+		}
+		renderList->AddConvexPolyFilled(bounds, AR_COL32(255.f, 255.f, 255.f, 255.f));
+	}
+
+	bool HitTest(const ArVec2& pos) const override
+	{
+		return mouseCollision->hovering;
+	}
+};
+
+class IArGLayoutComp : public IArGraphicComponent
+{
+};
+
+class ArGHorizontalLayoutComp : public IArGLayoutComp
+{
+public:
+	void OnUpdate(ArGraphicElement& owner, const ArgonContext& context) override
+	{
+		float offsetX = 5.f;
+		for (auto& child : owner.children)
+		{
+			child->boundingBox.localPosition = ArVec2(offsetX, 5.f);
+			offsetX += child->boundingBox.size->x + 5.f;
 		}
 	}
 };
 
-//inline auto snowFlakeManager = ArGui::GetGraphicManager().AddLayer(ArLayerAdditionPriority::AfterBackground)->AddElement(new SnowFlakeManager());
+class ArGVerticalLayoutComp : public IArGLayoutComp
+{
+public:
+	void OnUpdate(ArGraphicElement& owner, const ArgonContext& context) override
+	{
+		float offsetY = 5.f;
+		for (auto& child : owner.children)
+		{
+			if (!child->visible)
+				continue;
+			child->boundingBox.localPosition = ArVec2(5.f, offsetY);
+			offsetY += child->boundingBox.size->y + 5.f;
+		}
+	}
+};
+
+class SimpleWindowElement : public ArGraphicElement
+{
+public:
+	class TitleBar : public ArGraphicElement
+	{
+	public:
+		ArStringView title = {};
+
+		TitleBar(ArStringView title) : title(title) {}
+
+		void Awake(const ArgonContext& context) override
+		{
+			AddComponent(typeid(ArGDroppableComp), new ArGDroppableComp);
+
+			owner->boundingBox.size.AddObserver([this](const ArVec2& size) {
+				boundingBox.size = ArVec2(size.x, 30.f);
+				});
+		}
+
+		void OnRender(const ArgonContext& context) override
+		{
+			renderList->AddRectFilled(boundingBox.GetRect(), AR_COL32(140.f, 140.f, 140.f, 255.f));
+			renderList->AddText(title, 16, boundingBox.GetActualPosition() + ArVec2(5.f, 3.f), AR_COL32_WHITE);
+			renderList->AddRect(boundingBox.GetRect(), AR_COL32(0.f, 0.f, 0.f, 255.f), 1.f);
+		}
+	};
+	class Container : public ArGraphicElement
+	{
+	public:
+		class CheckBox : public ArGraphicElement
+		{
+		public:
+			ArGFloatAnimatorComp* animation = nullptr;
+			bool* checkedValue = nullptr;
+			ArStringView title = {};
+
+			CheckBox(ArStringView title, bool* checkedValue = nullptr) : title(title), checkedValue(checkedValue) {}
+
+			void Awake(const ArgonContext& context) override
+			{
+				animation = new ArGFloatAnimatorComp(*checkedValue ? 255.f : 0.f);
+				AddComponent(typeid(ArGFloatAnimatorComp), animation);
+
+				boundingBox.size = ArVec2(context.renderManager.CalcTextSize(title, 16u).x + 30.f, 20.f);
+			}
+
+			void OnUpdate(const ArgonContext& context) override
+			{
+
+				if (!focusing)
+					return;
+
+				if ((hovered && context.inputManager.IsMouseButtonDown(ArMouseButton::Left)) || context.inputManager.IsGamepadButtonDown(ArGamepadButton::FaceDown))
+				{
+					*checkedValue = !*checkedValue;
+					animation->StartNewProcess(*checkedValue ? 0.f : 255.f, *checkedValue ? 255.f : 0.f, 200ms);
+
+				}
+			}
+
+			void OnRender(const ArgonContext& context) override
+			{
+				renderList->AddRectFilled(ArRect(boundingBox.GetRect().min, boundingBox.GetRect().min + ArVec2(20.f, 20.f)), AR_COL32(130.f, 130.f, 130.f, 255.f));
+				renderList->AddRectFilled(ArRect(boundingBox.GetRect().min + ArVec2(5.f, 5.f), boundingBox.GetRect().min + ArVec2(15.f, 15.f)), AR_COL32(20.f, 20.f, 20.f, animation->value));
+				renderList->AddText(title, 16, boundingBox.GetActualPosition() + ArVec2(25.f, 2.f), AR_COL32_WHITE);
+			}
+		};
+
+		void Awake(const ArgonContext& context) override
+		{
+			focusable = false;
+
+			owner->boundingBox.size.AddObserver([this](const ArVec2& size) {
+				boundingBox.size = ArVec2(size.x, size.y - 30.f);
+				});
+
+			boundingBox.localPosition = ArVec2(0.f, 30.f);
+
+			AddComponent(typeid(ArGVerticalLayoutComp), new ArGVerticalLayoutComp); // Add vertical layout
+
+			bool* texture = new bool(false);
+			CheckBox* checkBox3 = new CheckBox("None", texture);
+			CheckBox* checkBox2 = new CheckBox("Enable cb3", &checkBox3->visible);
+			CheckBox* checkBox1 = new CheckBox("Enable cb2", &checkBox2->visible);
+
+			AddChild(checkBox1);
+			AddChild(checkBox2);
+			AddChild(checkBox3);
+		}
+	};
+public:
+	TitleBar* titleBar = nullptr;
+	SimpleWindowElement(ArStringView title) : titleBar(new TitleBar(title)) {}
+
+	void Awake(const ArgonContext& context) override
+	{
+		AddChild(titleBar);
+		AddChild(new Container());
+		AddChild(new ArGResizableElement(ArVec2(50.f, 50.f)));
+
+		boundingBox.position = ArVec2(200.f, 200.f);
+		boundingBox.size = ArVec2(300.f, 200.f);
+	}
+
+	void OnRender(const ArgonContext& context) override
+	{
+		renderList->AddRectFilled(ArRect(boundingBox.GetRect().min + ArVec2(0.f, 30.f), boundingBox.GetRect().max), AR_COL32(100.f, 100.f, 100.f, 255.f));
+		renderList->AddRect(boundingBox.GetRect(), AR_COL32(0.f, 0.f, 0.f, 255.f), 1.f);
+	}
+};
+
+auto a = ArGui::GetGraphicManager().GetDefaultLayer();
+
+auto testElementInstance = a->AddElement(new SimpleWindowElement("Demo Window 1"));
+auto testElementInstance2 = a->AddElement(new SimpleWindowElement("Demo Window 2"));
+auto testElementInstance3 = a->AddElement(new SimpleWindowElement("Demo Window 3"));
+auto testElementInstance4 = a->AddElement(new SimpleWindowElement("Demo Window 4"));
+auto testElementInstance5 = a->AddElement(new SimpleWindowElement("Demo Window 5"));

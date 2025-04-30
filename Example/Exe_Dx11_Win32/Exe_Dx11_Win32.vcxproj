@@ -153,23 +153,23 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\ArgonContext.cpp" />
-    <ClCompile Include="..\..\ArgonCore.cpp" />
+    <ClCompile Include="..\..\ArgonGui.cpp" />
     <ClCompile Include="..\..\ArgonGraphic.cpp" />
     <ClCompile Include="..\..\ArgonInput.cpp" />
     <ClCompile Include="..\..\ArgonRender.cpp" />
     <ClCompile Include="..\..\Backends\ArgonDx11Renderer.cpp" />
     <ClCompile Include="..\..\Backends\ArgonFreeTypeGlyphParser.cpp" />
     <ClCompile Include="..\..\Backends\ArgonWin32Platform.cpp" />
-    <ClCompile Include="Demo.cpp" />
     <ClCompile Include="Main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\ArgonContext.h" />
-    <ClInclude Include="..\..\ArgonCore.h" />
+    <ClInclude Include="..\..\ArgonGui.h" />
     <ClInclude Include="..\..\ArgonGraphic.h" />
     <ClInclude Include="..\..\ArgonInput.h" />
     <ClInclude Include="..\..\ArgonMath.h" />
     <ClInclude Include="..\..\ArgonRender.h" />
+    <ClInclude Include="..\..\ArgonTemplate.h" />
     <ClInclude Include="..\..\Backends\ArgonDx11Renderer.h" />
     <ClInclude Include="..\..\Backends\ArgonFreeTypeGlyphParser.h" />
     <ClInclude Include="..\..\Backends\ArgonWin32Platform.h" />

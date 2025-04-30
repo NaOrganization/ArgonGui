@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "../ArgonCore.h"
+#include "../ArgonGui.h"
 #include <freetype/freetype.h>
 
 class ArFreeTypeFontInfo final
@@ -21,9 +21,9 @@ class ArgonFreeTypeGlyphParser final : public IArgonGlyphParser
 public:
 	FT_Library ftLibrary = {};
 	FT_Memory ftMemory = nullptr;
-	std::vector<ArFreeTypeFontInfo> fontFaces = {};
+	std::vector<ArFreeTypeFontInfo> fonts = {};
 public:
-	bool Awake() override;
+	bool Awake(const IArGlyphParserConfig& config) override;
 
 	void OnDestroy() override;
 
@@ -31,5 +31,5 @@ public:
 
 	std::optional<FontFaceInitResult> InitFontFace(uint8_t* binary, size_t size) override;
 
-	std::optional<GlyphParseResult> ParseGlyph(const ArFontFace& fontFace, const ArFontFace::GlyphCacheKey& key) override;
+	std::optional<GlyphParseResult> ParseGlyph(const ArFont& font, const ArGlyphKey& key) override;
 };

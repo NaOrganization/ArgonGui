@@ -1,5 +1,5 @@
 ﻿#include "ArgonWin32Platform.h"
-#include "../ArgonCore.h"
+#include "../ArgonGui.h"
 #include "windowsx.h"
 #include "xinput.h"
 
@@ -374,9 +374,9 @@ void ArgonWin32Platform::TryGamepads()
 
 LRESULT WINAPI ArWin32WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	if (!ArgonContext::GetInstance().IsRunning())
+	if (!ArGui::IsRunning())
 		return 0;
-	ArgonInputManager& inputManager = ArgonContext::GetInstance().inputManager;
+	ArgonInputManager& inputManager = ArGui::GetInputManager();
 	ArgonWin32Platform* platform = (ArgonWin32Platform*)ArgonContext::GetInstance().platform;
 	switch (msg)
 	{

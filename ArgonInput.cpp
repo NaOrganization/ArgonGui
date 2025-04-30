@@ -1,9 +1,5 @@
-﻿#include "ArgonCore.h"
+﻿#include "ArgonGui.h"
 #include <algorithm>
-
-// ---------------------------------------------------------- //
-//  !. Helper Functions
-// ---------------------------------------------------------- //
 
 void CleanupPressTimes(std::vector<ArTimePoint>& pressTimes)
 {
@@ -38,10 +34,6 @@ int GetGamepadEventIndex(const ArInputEvent& event)
 	}
 	return -1;
 }
-
-// ---------------------------------------------------------- //
-//  !. ArMouseState Implementation
-// ---------------------------------------------------------- //
 
 void ArMouseState::HandleEvent(const ArInputEvent& event)
 {
@@ -86,10 +78,6 @@ void ArMouseState::EndFrame()
 	wheelDelta = ArVec2();
 }
 
-// ---------------------------------------------------------- //
-//  !. ArKeyboardState Implementation
-// ---------------------------------------------------------- //
-
 void ArKeyboardState::HandleEvent(const ArInputEvent& event)
 {
 	if (const auto& data = std::get_if<ArKeyboardEventData>(&event.eventData))
@@ -119,10 +107,6 @@ void ArKeyboardState::EndFrame()
 		CleanupPressTimes(keyState.pressTimes);
 	}
 }
-
-// ---------------------------------------------------------- //
-//  !. ArGamepadState Implementation
-// ---------------------------------------------------------- //
 
 void ArGamepadState::HandleEvent(const ArInputEvent& event)
 {
@@ -174,10 +158,6 @@ void ArDisplayState::HandleEvent(const ArInputEvent& event)
 	position = data.position;
 	size = data.size;
 }
-
-// ---------------------------------------------------------- //
-//  !. ArgonInputManager Implementation
-// ---------------------------------------------------------- //
 
 void ArgonInputManager::AddEvent(const ArInputEvent& event)
 {
@@ -243,11 +223,10 @@ void ArgonInputManager::ParseEvent(const ArInputEvent& event)
 	default:
 		return;
 	}
-}
 
-// ---------------------------------------------------------- //
-//  !. Mouse Input Query Functions
-// ---------------------------------------------------------- //
+	if (event.deviceType != ArInputDevice::Display)
+		lastInputDevice = event.deviceType;
+}
 
 bool ArgonInputManager::IsMouseButtonDown(ArMouseButton button) const
 {
@@ -290,10 +269,6 @@ ArVec2 ArgonInputManager::GetMouseWheelDelta() const
 	return mouseState.wheelDelta;
 }
 
-// ---------------------------------------------------------- //
-//  !. Keyboard Input Query Functions
-// ---------------------------------------------------------- //
-
 bool ArgonInputManager::IsKeyDown(ArKeyCode keyCode) const
 {
 	auto it = keyboardState.keyStates.find(keyCode);
@@ -324,10 +299,6 @@ bool ArgonInputManager::IsKeyCombinationPressed(const std::vector<ArKeyCode>& ke
 	}
 	return true;
 }
-
-// ---------------------------------------------------------- //
-//  !. Gamepad Input Query Functions
-// ---------------------------------------------------------- //
 
 bool ArgonInputManager::IsGamepadButtonDown(ArGamepadButton button, int index) const
 {
@@ -413,10 +384,6 @@ ArDisplayState ArgonInputManager::GetDisplayState() const
 {
 	return displayState;
 }
-
-// ---------------------------------------------------------- //
-//  !. Helper Functions
-// ---------------------------------------------------------- //
 
 bool ArgonInputManager::IsButtonClicked(const ArButtonState& buttonState, int clickCount) const
 {

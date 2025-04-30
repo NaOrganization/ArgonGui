@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "../ArgonCore.h"
+#include "../ArgonGui.h"
 #include <d3d11.h>
 
 class ArDx11Buffer final
@@ -89,7 +89,7 @@ private:
 public:
 	ArgonDx11Renderer() {}
 
-	std::string Name() const override { return "Dx11"; }
+	ArString Name() const override { return "DirectX 11"; }
 
 	bool Awake(const IArRendererConfig& config) override;
 

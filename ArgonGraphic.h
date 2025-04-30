@@ -1,9 +1,9 @@
 ﻿#pragma once
 #include <typeindex>
 
-// ---------------------------------------------------------- //
-//  !. Enum class declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonGraphic] Enum class declarations
+// ----------------------------------------------------------- //
 
 // [ENUM] [ArgonGraphicSystem] - To describe the priority of the layer addition.
 enum class ArLayerAdditionPriority : uint32_t
@@ -13,6 +13,19 @@ enum class ArLayerAdditionPriority : uint32_t
 	AfterBackground,
 	BeforeForeground,
 	None
+};
+
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonGraphic] Interface declarations
+// ----------------------------------------------------------- //
+
+// [INTERFACE] [ArgonGraphicSystem] - Graphic component interface. This interface is used to create custom components for the graphic system.
+class IArGraphicComponent
+{
+public:
+	virtual void Awake(ArGraphicElement& owner) {};
+	virtual void OnUpdate(ArGraphicElement& owner, const ArgonContext& context) = 0;
+	virtual void OnRender(ArGraphicElement& owner) {};
 };
 
 // ---------------------------------------------------------- //
@@ -32,17 +45,17 @@ public:
 class ArGraphicBoundingBox final
 {
 public:
-	ArVec2 position = ArVec2();			// Position of owner element
-	ArVec2 localPosition = ArVec2();	// Offset to origin of the owner element
-	ArVec2 size = ArVec2();
+	ArValueSubject<ArVec2> position = ArVec2();			// Position of owner element
+	ArValueSubject<ArVec2> localPosition = ArVec2();	// Offset to origin of the owner element
+	ArValueSubject<ArVec2> size = ArVec2();
 public:
-	ArRect GetRect() const { return ArRect(position + localPosition, position + localPosition + size); }
+	ArRect GetRect() const { return ArRect(*position + *localPosition, *position + *localPosition + *size); }
 
-	ArVec2 GetActualPosition() const { return position + localPosition; }
+	ArVec2 GetActualPosition() const { return *position + *localPosition; }
 
 	bool operator==(const ArGraphicBoundingBox& other) const
 	{
-		return position == other.position && localPosition == other.localPosition && size == other.size;
+		return *position == *other.position && *localPosition == *other.localPosition && *size == *other.size;
 	}
 	bool operator!=(const ArGraphicBoundingBox& other) const
 	{
@@ -146,76 +159,6 @@ public:
 	ArGraphicElement* GetElementByIndex(size_t index) const { if (index >= elements.size()) return nullptr; return elements[index]; }
 };
 
-// [CLASS] [ArgonGraphicSystem] - Render list element for the graphic system. Only for the render list.
-class ArGraphicPrimRenderListElement final : public ArGraphicElement 
-{
-public:
-	void Awake(const ArgonContext& context) override;
-
-	void OnUpdate(const ArgonContext& context) override;
-};
-
-// ---------------------------------------------------------- //
-// !. ArgonGraphicManager declarations
-// ---------------------------------------------------------- //
-
-// [CLASS] [ArgonGraphicSystem] - The main graphic manager class. This class is used to manage all the graphic elements and layers.
-class ArgonGraphicManager final
-{
-private:
-	ArGraphicLayer* backgroundLayer = new ArGraphicLayer;
-	ArGraphicLayer* defaultLayer = new ArGraphicLayer;
-	ArGraphicLayer* foregroundLayer = new ArGraphicLayer;
-	std::vector<ArGraphicLayer*> layers = { backgroundLayer, defaultLayer, foregroundLayer };
-
-	ArGraphicPrimRenderListElement* backgroundRenderListElement = new ArGraphicPrimRenderListElement;
-	ArGraphicPrimRenderListElement* foregroundRenderListElement = new ArGraphicPrimRenderListElement;
-public:
-	ArGraphicElement* focusingElement = nullptr;
-	ArGraphicElement* hoveringElement = nullptr;
-public:
-	ArgonGraphicManager() {}
-	ArgonGraphicManager(const ArgonGraphicManager&) = delete;
-	ArgonGraphicManager& operator=(const ArgonGraphicManager&) = delete;
-	~ArgonGraphicManager();
-
-	void Awake();
-
-	void StartFrame(ArgonContext& context);
-
-	void EndFrame(ArgonContext& context);
-
-
-	ArGraphicLayer* AddLayer(ArLayerAdditionPriority priority = ArLayerAdditionPriority::AfterDefault);
-
-	ArGraphicLayer* GetBackgroundLayer() const { return backgroundLayer; }
-
-	ArGraphicLayer* GetDefaultLayer() const { return defaultLayer; }
-
-	ArGraphicLayer* GetForegroundLayer() const { return foregroundLayer; }
-
-	ArGraphicLayer* GetLayerByIndex(size_t index) const { if (index >= layers.size()) return nullptr; return layers[index]; }
-
-	ArGraphicRenderList* GetBackgroundRenderList() const { return backgroundRenderListElement->renderList; }
-
-	ArGraphicRenderList* GetForegroundRenderList() const { return foregroundRenderListElement->renderList; }
-
-	const std::vector<ArGraphicLayer*>& GetLayers() const { return layers; }
-};
-
-// ---------------------------------------------------------- //
-// !. ArgonGraphicSystem Interface declarations
-// ---------------------------------------------------------- //
-
-// [INTERFACE] [ArgonGraphicSystem] - Graphic component interface. This interface is used to create custom components for the graphic system.
-class IArGraphicComponent
-{
-public:
-	virtual void Awake(ArGraphicElement& owner) {};
-	virtual void OnUpdate(ArGraphicElement& owner, const ArgonContext& context) = 0;
-	virtual void OnRender(ArGraphicElement& owner) {};
-};
-
 // ---------------------------------------------------------- //
 // !. Basic Components declarations
 // ---------------------------------------------------------- //
@@ -293,4 +236,145 @@ public:
 	bool IsInBounds(ArVec2 pos);
 
 	void OnUpdate(ArGraphicElement& owner, const ArgonContext& context) override;
+};
+
+// ------------------------------------------------------------- //
+// !. Graphic System Internal Elements declarations
+// ------------------------------------------------------------- //
+
+// [CLASS] [ArgonGraphicSystem] - Render list element for the graphic system. Only for the render list.
+class ArGraphicPrimRenderListElement final : public ArGraphicElement 
+{
+public:
+	void Awake(const ArgonContext& context) override;
+
+	void OnUpdate(const ArgonContext& context) override;
+};
+
+// [CLASS] [ArgonGraphicSystem] - Focus selector element for the graphic system. This element is used to show the focus selector.
+class ArGraphicFocusSelectorElement : public ArGraphicElement
+{
+public:
+	bool selected = false;
+	ArGVec2AnimatorComp* positionAnimation = nullptr;
+	ArGVec2AnimatorComp* sizeAnimation = nullptr;
+	ArGFloatAnimatorComp* alphaAnimation = nullptr;
+	ArGraphicBoundingBox lastFocusBoundingBox = {};
+	ArGraphicElement* lastFocusElement = nullptr;
+
+	void Awake(const ArgonContext& context) override;
+
+	void OnUpdate(const ArgonContext& context) override;
+
+	void OnRender(const ArgonContext& context) override;
+};
+
+// ----------------------------------------------------------- //
+// ! ArgonThemeManager declarations
+// ----------------------------------------------------------- //
+
+class ArGraphicStyleProperty final
+{
+public:
+	using ValueType = std::variant<float, int, ArVec2>;
+
+	ValueType value = {};
+
+	ArGraphicStyleProperty(ValueType value) : value(value) {}
+
+	operator float() const { if (!std::holds_alternative<float>(value)) throw std::bad_variant_access(); return std::get<float>(value); }
+	operator int() const { if (!std::holds_alternative<int>(value)) throw std::bad_variant_access(); return std::get<int>(value); }
+	operator ArVec2() const { if (!std::holds_alternative<ArVec2>(value)) throw std::bad_variant_access(); return std::get<ArVec2>(value); }
+};
+
+class IArGraphicStyleCollection
+{
+public:
+	virtual std::unordered_map<ArStringView, ArGraphicStyleProperty>& GetProperties() const = 0;
+};
+
+class IArGraphicColorPalette
+{
+public:
+	virtual std::unordered_map<ArStringView, ArColor>& GetColors() const = 0;
+};
+
+class ArgonGraphicThemeManager final
+{
+public:
+	std::unordered_map<ArStringView, ArGraphicStyleProperty> properties = {};
+	std::unordered_map<ArStringView, ArColor> colors = {};
+
+	ArgonGraphicThemeManager() {}
+	ArgonGraphicThemeManager(const ArgonGraphicThemeManager&) = delete;
+	ArgonGraphicThemeManager& operator=(const ArgonGraphicThemeManager&) = delete;
+	~ArgonGraphicThemeManager() {}
+
+	bool ImportStyleCollection(const IArGraphicStyleCollection& collection) { properties = collection.GetProperties(); return true; }
+
+	bool ImportColorPalette(const IArGraphicColorPalette& palette) { colors = palette.GetColors(); return true; }
+
+	const ArGraphicStyleProperty& GetStyleProperty(ArStringView name) const
+	{
+		auto it = properties.find(name);
+		if (it != properties.end())
+			return it->second;
+		throw std::out_of_range("Style property not found");
+	}
+
+	const ArColor& GetColor(ArStringView name) const
+	{
+		auto it = colors.find(name);
+		if (it != colors.end())
+			return it->second;
+		throw std::out_of_range("Color not found");
+	}
+};
+
+// ---------------------------------------------------------- //
+// !. ArgonGraphicManager declarations
+// ---------------------------------------------------------- //
+
+// [CLASS] [ArgonGraphicSystem] - The main graphic manager class. This class is used to manage all the graphic elements and layers.
+class ArgonGraphicManager final
+{
+private:
+	ArGraphicLayer* backgroundLayer = new ArGraphicLayer;
+	ArGraphicLayer* defaultLayer = new ArGraphicLayer;
+	ArGraphicLayer* foregroundLayer = new ArGraphicLayer;
+	std::vector<ArGraphicLayer*> layers = { backgroundLayer, defaultLayer, foregroundLayer };
+
+	ArGraphicPrimRenderListElement* backgroundRenderListElement = new ArGraphicPrimRenderListElement;
+	ArGraphicPrimRenderListElement* foregroundRenderListElement = new ArGraphicPrimRenderListElement;
+	ArGraphicFocusSelectorElement* focusSelectorElement = new ArGraphicFocusSelectorElement;
+public:
+	ArGraphicElement* focusingElement = nullptr;
+	ArGraphicElement* hoveringElement = nullptr;
+public:
+	ArgonGraphicManager() {}
+	ArgonGraphicManager(const ArgonGraphicManager&) = delete;
+	ArgonGraphicManager& operator=(const ArgonGraphicManager&) = delete;
+	~ArgonGraphicManager();
+
+	void Awake();
+
+	void StartFrame(ArgonContext& context);
+
+	void EndFrame(ArgonContext& context);
+
+	ArGraphicLayer* AddLayer(ArLayerAdditionPriority priority = ArLayerAdditionPriority::AfterDefault);
+
+	ArGraphicLayer* GetBackgroundLayer() const { return backgroundLayer; }
+
+	ArGraphicLayer* GetDefaultLayer() const { return defaultLayer; }
+
+	ArGraphicLayer* GetForegroundLayer() const { return foregroundLayer; }
+
+	ArGraphicLayer* GetLayerByIndex(size_t index) const { if (index >= layers.size()) return nullptr; return layers[index]; }
+
+	ArGraphicRenderList* GetBackgroundRenderList() const { return backgroundRenderListElement->renderList; }
+
+	ArGraphicRenderList* GetForegroundRenderList() const { return foregroundRenderListElement->renderList; }
+
+	const std::vector<ArGraphicLayer*>& GetLayers() const { return layers; }
 };

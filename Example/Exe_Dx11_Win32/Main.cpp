@@ -40,7 +40,7 @@ int main(int, char**)
 		return 1;
 	}
 
-	if (!ArGui::SetGlyphParser(new ArgonFreeTypeGlyphParser()))
+	if (!ArGui::SetGlyphParser(new ArgonFreeTypeGlyphParser(), {}))
 	{
 		CleanupDeviceD3D();
 		::UnregisterClassW(wc.lpszClassName, wc.hInstance);

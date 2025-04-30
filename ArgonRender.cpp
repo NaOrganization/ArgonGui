@@ -1,5 +1,5 @@
 ﻿#define STB_RECT_PACK_IMPLEMENTATION
-#include "ArgonCore.h"
+#include "ArgonGui.h"
 #include <fstream>
 
 // ---------------------------------------------------------- //
@@ -104,7 +104,7 @@ static const int8_t proggy_clean_ttf_compressed_data_base85[11980 + 1] =
 // !. STB Decompress
 // ---------------------------------------------------------- //
 
-static unsigned int stb_decompress_length(const unsigned char* input)
+static uint32_t stb_decompress_length(const unsigned char* input)
 {
 	return (input[8] << 24) + (input[9] << 16) + (input[10] << 8) + input[11];
 }
@@ -112,7 +112,7 @@ static unsigned int stb_decompress_length(const unsigned char* input)
 static unsigned char* stb__barrier_out_e, * stb__barrier_out_b;
 static const unsigned char* stb__barrier_in_b;
 static unsigned char* stb__dout;
-static void stb__match(const unsigned char* data, unsigned int length)
+static void stb__match(const unsigned char* data, uint32_t length)
 {
 	// INVERSE of memmove... write each byte before copying the next...
 	if (stb__dout + length > stb__barrier_out_e) { stb__dout += length; return; }
@@ -120,7 +120,7 @@ static void stb__match(const unsigned char* data, unsigned int length)
 	while (length--) *stb__dout++ = *data++;
 }
 
-static void stb__lit(const unsigned char* data, unsigned int length)
+static void stb__lit(const unsigned char* data, uint32_t length)
 {
 	if (stb__dout + length > stb__barrier_out_e) { stb__dout += length; return; }
 	if (data < stb__barrier_in_b) { stb__dout = stb__barrier_out_e + 1; return; }
@@ -150,7 +150,7 @@ static const unsigned char* stb_decompress_token(const unsigned char* i)
 	return i;
 }
 
-static unsigned int stb_adler32(unsigned int adler32, unsigned char* buffer, unsigned int buflen)
+static uint32_t stb_adler32(uint32_t adler32, unsigned char* buffer, uint32_t buflen)
 {
 	const unsigned long ADLER_MOD = 65521;
 	unsigned long s1 = adler32 & 0xffff, s2 = adler32 >> 16;
@@ -178,18 +178,18 @@ static unsigned int stb_adler32(unsigned int adler32, unsigned char* buffer, uns
 		buflen -= blocklen;
 		blocklen = 5552;
 	}
-	return (unsigned int)(s2 << 16) + (unsigned int)s1;
+	return (uint32_t)(s2 << 16) + (uint32_t)s1;
 }
 
 // ---------------------------------------------------------- //
 // !. Base85 Decode
 // ---------------------------------------------------------- //
 
-static unsigned int stb_decompress(unsigned char* output, const unsigned char* i, unsigned int /*length*/)
+static uint32_t stb_decompress(unsigned char* output, const unsigned char* i, uint32_t /*length*/)
 {
 	if (stb__in4(0) != 0x57bC0000) return 0;
 	if (stb__in4(4) != 0)          return 0; // error! stream is > 4GB
-	const unsigned int olen = stb_decompress_length(i);
+	const uint32_t olen = stb_decompress_length(i);
 	stb__barrier_in_b = i;
 	stb__barrier_out_e = output + olen;
 	stb__barrier_out_b = output;
@@ -202,7 +202,7 @@ static unsigned int stb_decompress(unsigned char* output, const unsigned char* i
 		if (i == old_i) {
 			if (*i == 0x05 && i[1] == 0xfa) {
 				if (stb__dout != output + olen) return 0;
-				if (stb_adler32(1, output, olen) != (unsigned int)stb__in4(2))
+				if (stb_adler32(1, output, olen) != (uint32_t)stb__in4(2))
 					return 0;
 				return olen;
 			}
@@ -214,12 +214,12 @@ static unsigned int stb_decompress(unsigned char* output, const unsigned char* i
 			return 0;
 	}
 }
-static unsigned int Decode85Byte(char c) { return c >= '\\' ? c - 36 : c - 35; }
+static uint32_t Decode85Byte(char c) { return c >= '\\' ? c - 36 : c - 35; }
 static void         Decode85(const unsigned char* src, unsigned char* dst)
 {
 	while (*src)
 	{
-		unsigned int tmp = Decode85Byte(src[0]) + 85 * (Decode85Byte(src[1]) + 85 * (Decode85Byte(src[2]) + 85 * (Decode85Byte(src[3]) + 85 * Decode85Byte(src[4]))));
+		uint32_t tmp = Decode85Byte(src[0]) + 85 * (Decode85Byte(src[1]) + 85 * (Decode85Byte(src[2]) + 85 * (Decode85Byte(src[3]) + 85 * Decode85Byte(src[4]))));
 		dst[0] = ((tmp >> 0) & 0xFF); dst[1] = ((tmp >> 8) & 0xFF); dst[2] = ((tmp >> 16) & 0xFF); dst[3] = ((tmp >> 24) & 0xFF);   // We can't assume little-endianness.
 		src += 5;
 		dst += 4;
@@ -727,7 +727,7 @@ void ArRenderList::AddText(ArStringView text, uint32_t size, const ArVec2& pos, 
 	if ((color & AR_COL32_A_MASK) == 0)
 		return;
 
-	const std::vector<ArFontFace::GlyphInfo*>& glyphs = sharedData->renderManager->textureManager.TryGetGlyphs(text, size);
+	const std::vector<ArGlyphInfo*>& glyphs = sharedData->renderManager->TryGetGlyphs(text, size);
 
 	float x = pos.x;
 	for (const auto& glyph : glyphs)
@@ -737,9 +737,9 @@ void ArRenderList::AddText(ArStringView text, uint32_t size, const ArVec2& pos, 
 
 		if (glyph->visible)
 		{
-			const ArTextureAtlas& atlas = sharedData->renderManager->textureManager.atlases[glyph->textureAtlasIndex];
+			const ArTextureLand& land = sharedData->renderManager->lands[glyph->textureAtlasIndex];
 
-			PushTexture(atlas.GetTexture());
+			PushTexture(land.GetTexture());
 
 			const ArVec2 glyphPos = ArVec2(x, pos.y) + glyph->min;
 			if (glyph->colored)
@@ -1056,7 +1056,7 @@ int ArRenderList::CalcCircleAutoSegmentCount(float radius) const
 // !. ArTextureAtlas implementation
 // ---------------------------------------------------------- //
 
-void ArTextureAtlas::OnDestroy(IArgonRenderer* renderer)
+void ArTextureLand::OnDestroy(IArgonRenderer* renderer)
 {
 	if (pixels)
 	{
@@ -1071,39 +1071,40 @@ void ArTextureAtlas::OnDestroy(IArgonRenderer* renderer)
 // !. ArFontFace implementation
 // ---------------------------------------------------------- //
 
-ArFontFace::GlyphInfo* ArFontFace::GetGlyphNoFallback(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
+ArGlyphInfo* ArFont::GetGlyphNoFallback(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
 {
-	ArFontFace::GlyphInfo* glyphInfo = FindGlyph(codepoint, size, flags);
+	ArGlyphInfo* glyphInfo = FindGlyph(codepoint, size, flags);
 	if (glyphInfo)
 		return glyphInfo;
 	return nullptr;
 }
 
-ArFontFace::GlyphInfo* ArFontFace::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
+ArGlyphInfo* ArFont::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
 {
-	ArFontFace::GlyphInfo* glyphInfo = FindGlyph(codepoint, size, flags);
+	ArGlyphInfo* glyphInfo = FindGlyph(codepoint, size, flags);
 	if (glyphInfo)
 		return glyphInfo;
 	return fallbackGlyph;
 }
 
-ArFontFace::GlyphInfo* ArFontFace::FindGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
+ArGlyphInfo* ArFont::FindGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
 {
 	GlyphCacheKey key = GlyphCacheKey(codepoint, size, flags);
 	auto it = glyphs.find(key);
 	if (it != glyphs.end())
 		return &it->second;
-	if (!textureManager.glyphParser->HasGlyph(fontId, codepoint))
+	if (!glyphParser->HasGlyph(fontId, codepoint))
 		return nullptr;
-	auto parserResult = textureManager.glyphParser->ParseGlyph(*this, key);
+	auto parserResult = glyphParser->ParseGlyph(*this, key);
 	if (!parserResult.has_value())
 		return nullptr;
-	glyphs[key] = parserResult->glyphInfo;
+	glyphs[key] = *parserResult->glyphInfo;
+	delete parserResult->glyphInfo;
 	mappingQueue.emplace(key, parserResult->pixels);
 	return &glyphs[key];
 }
 
-void ArFontFace::Awake()
+void ArFont::Awake()
 {
 	fallbackGlyph = TryGetGlyph(u'\xFFFD', 16u, ArGlyphFlag::None);
 	if (!fallbackGlyph)
@@ -1112,7 +1113,7 @@ void ArFontFace::Awake()
 		fallbackGlyph = TryGetGlyph(' ', 16u, ArGlyphFlag::None);
 }
 
-void ArFontFace::EndFrame()
+void ArFont::EndFrame(ArgonRenderManager& renderManager)
 {
 	while (!mappingQueue.empty())
 	{
@@ -1121,18 +1122,16 @@ void ArFontFace::EndFrame()
 		auto it = glyphs.find(task.key);
 		if (it == glyphs.end())
 			continue;
-		ArFontFace::GlyphInfo& glyphInfo = it->second;
+		ArGlyphInfo& glyphInfo = it->second;
 
-		ArTextureManager::Territory territory = textureManager.AllocateTerritory((int)glyphInfo.size.x, (int)glyphInfo.size.y);
-		if (!territory.IsValid())
-			continue;
-		ArTextureAtlas& atlas = textureManager.atlases[territory.atlasIndex];
+		ArgonRenderManager::Territory territory = renderManager.AllocateTerritory((int)glyphInfo.size.x, (int)glyphInfo.size.y);
+		ArTextureLand& land = renderManager.lands[territory.landIndex];
 
-		glyphInfo.textureAtlasIndex = territory.atlasIndex;
+		glyphInfo.textureAtlasIndex = territory.landIndex;
 
 		for (int y = 0; y < territory.size.y; y++)
 		{
-			unsigned int* write_ptr = &atlas.pixels[territory.position.x + ((territory.position.y + y) * atlas.atlasSize.x)];
+			uint32_t* write_ptr = &land.pixels[territory.position.x + ((territory.position.y + y) * land.size.x)];
 			for (int x = 0; x < territory.size.x; x++)
 			{
 				*(write_ptr + x) = task.pixels[x + y * territory.size.x];
@@ -1142,176 +1141,91 @@ void ArFontFace::EndFrame()
 		delete[] task.pixels;
 
 		glyphInfo.uv = ArRect(
-			(float)(territory.position.x) * atlas.uvScale.x,
-			(float)(territory.position.y) * atlas.uvScale.y,
-			(float)(territory.position.x + territory.size.x) * atlas.uvScale.x,
-			(float)(territory.position.y + territory.size.y) * atlas.uvScale.y);
-		atlas.dirty = true;
+			(float)(territory.position.x) * land.uvScale.x,
+			(float)(territory.position.y) * land.uvScale.y,
+			(float)(territory.position.x + territory.size.x) * land.uvScale.x,
+			(float)(territory.position.y + territory.size.y) * land.uvScale.y);
+		land.dirty = true;
 	}
-}
-
-// ---------------------------------------------------------- //
-// !. ArTextureManager implementation
-// ---------------------------------------------------------- //
-
-void ArTextureManager::Awake(ArRenderListSharedData& sharedData)
-{
-	BuildBaseTerritories(sharedData);
-
-	for (auto& fontFace : fontFaces)
-	{
-		fontFace.Awake();
-	}
-}
-
-void ArTextureManager::StartFrame()
-{
-	while (!fontFaceQueryQueue.empty())
-	{
-		FontFaceQuery& query = fontFaceQueryQueue.front();
-		auto result = glyphParser->InitFontFace((uint8_t*)query.fontBinary, query.binarySize);
-		fontFaceQueryQueue.pop();
-		if (!result.has_value())
-			continue;
-		fontFaces.emplace_back(*this, result->fontId, result->name);
-	}
-}
-
-void ArTextureManager::EndFrame(ArRenderListSharedData& sharedData)
-{
-	for (auto& fontFace : fontFaces)
-	{
-		fontFace.EndFrame();
-	}
-}
-
-ArTextureManager::Territory ArTextureManager::AllocateTerritory(int width, int height)
-{
-	if (width <= 0 || height <= 0)
-		return {};
-
-	stbrp_rect rect = {};
-	rect.w = width;
-	rect.h = height;
-
-	auto atlasIt = atlases.begin();
-
-	Territory territory = Territory();
-	territory.size = ArIntVec2(width, height);
-	do
-	{
-		if (atlasIt == atlases.end())
-		{
-			atlases.emplace_back();
-			atlasIt = std::prev(atlases.end());
-		}
-		auto& atlas = *atlasIt;
-
-		if (stbrp_pack_rects(&atlas.rectPackerContext, &rect, 1))
-		{
-			territory.atlasIndex = int(atlasIt - atlases.begin());
-			territory.position = ArIntVec2(rect.x, rect.y);
-			break;
-		}
-
-		atlasIt++;
-	} while (!rect.was_packed);
-	territories.push_back(territory);
-	return territory;
-}
-
-ArFontFace::GlyphInfo* ArTextureManager::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags) const
-{
-	for (auto& fontFace : fontFaces)
-	{
-		ArFontFace::GlyphInfo* glyphInfo = fontFace.GetGlyphNoFallback(codepoint, size, flags);
-		if (glyphInfo)
-			return glyphInfo;
-	}
-	return nullptr;
-}
-
-std::vector<ArFontFace::GlyphInfo*> ArTextureManager::TryGetGlyphs(ArStringView text, uint32_t size, ArGlyphFlag flags) const
-{
-	std::vector<uint32_t> codePoints = ArHelp::Utf8::DecodeToCodepoints(text);
-	std::vector<ArFontFace::GlyphInfo*> glyphInfos;
-	glyphInfos.reserve(codePoints.size());
-	for (auto& code : codePoints)
-	{
-		glyphInfos.push_back(TryGetGlyph(code, size, flags));
-	}
-	return glyphInfos;
-}
-
-ArVec2 ArTextureManager::CalcTextSize(ArStringView text, uint32_t size, ArGlyphFlag flags) const
-{
-	std::vector<ArFontFace::GlyphInfo*> glyphInfos = TryGetGlyphs(text, size, flags);
-	ArVec2 textSize = ArVec2(0, 0);
-	for (auto& glyphInfo : glyphInfos)
-	{
-		if (!glyphInfo)
-			continue;
-		textSize.x += glyphInfo->advanceX;
-		textSize.y = ArMax(textSize.y, glyphInfo->size.y);
-	}
-	ArVec2 padding = ArVec2(0.5f, 0.5f);
-	textSize.x += padding.x * 2;
-	textSize.y += padding.y * 2;
-	textSize.x = ArMax(textSize.x, 1.0f);
-	textSize.y = ArMax(textSize.y, 1.0f);
-	return textSize;
-}
-
-void ArTextureManager::BuildBaseTerritories(ArRenderListSharedData& sharedData)
-{
-	buildedBaseTerritories = true;
-
-	Territory antiAliasingGlyph = AllocateTerritory(64, 64);
-	ArTextureAtlas& atlas = atlases[0];
-	for (int n = 0; n < 64; n++)
-	{
-		unsigned int y = n;
-		unsigned int line_width = n;
-		unsigned int pad_left = (antiAliasingGlyph.size.x - line_width) / 2;
-		unsigned int pad_right = antiAliasingGlyph.size.x - (pad_left + line_width);
-
-
-		unsigned int* write_ptr = &atlas.pixels[antiAliasingGlyph.position.x + ((antiAliasingGlyph.position.y + y) * atlas.atlasSize.x)];
-		for (unsigned int i = 0; i < pad_left; i++)
-			*(write_ptr + i) = AR_COL32(255, 255, 255, 0);
-
-		for (unsigned int i = 0; i < line_width; i++)
-			*(write_ptr + pad_left + i) = AR_COL32_WHITE;
-
-		for (unsigned int i = 0; i < pad_right; i++)
-			*(write_ptr + pad_left + line_width + i) = AR_COL32(255, 255, 255, 0);
-
-		ArVec2 uv0 = ArVec2((float)(antiAliasingGlyph.position.x + pad_left - 1), (float)(antiAliasingGlyph.position.y + y)) * atlas.uvScale;
-		ArVec2 uv1 = ArVec2((float)(antiAliasingGlyph.position.x + pad_left + line_width + 1), (float)(antiAliasingGlyph.position.y + y + 1)) * atlas.uvScale;
-		float half_v = (uv0.y + uv1.y) * 0.5f;
-		sharedData.uvOfBakeLines[n] = ArVec4(uv0.x, half_v, uv1.x, half_v);
-	}
-
-	Territory whitePixel = AllocateTerritory(2, 2);
-	for (int y = 0; y < whitePixel.size.y; y++)
-	{
-		unsigned int* write_ptr = &atlas.pixels[whitePixel.position.x + ((whitePixel.position.y + y) * atlas.atlasSize.x)];
-		for (int x = 0; x < whitePixel.size.x; x++)
-			*(write_ptr + x) = AR_COL32_WHITE;
-	}
-	sharedData.uvOfWhitInTexture = ArVec2(whitePixel.position.x + 0.5f, whitePixel.position.y + 0.5f) * atlas.uvScale;
 }
 
 // ---------------------------------------------------------- //
 // !. ArgonRenderManager implementation
 // ---------------------------------------------------------- //
 
+void ArgonRenderManager::Awake()
+{
+	sharedData.renderManager = this;
+
+	BuildBaseTerritories(sharedData);
+
+	for (auto& font : fonts)
+	{
+		font.Awake();
+	}
+}
+
+void ArgonRenderManager::StartFrame(IArgonGlyphParser* glyphParser)
+{
+	while (!newFontRequests.empty())
+	{
+		NewFontRequest& query = newFontRequests.front();
+		auto result = glyphParser->InitFontFace((uint8_t*)query.fontBinary, query.binarySize);
+		newFontRequests.pop();
+		if (!result.has_value())
+			continue;
+		fonts.emplace_back(glyphParser, result->fontId, result->name);
+	}
+
+	totalVertexCount = totalIndexCount = 0;
+}
+
+void ArgonRenderManager::EndFrame()
+{
+	if (fonts.empty())
+		AddFontFromCompressedBase85((const uint8_t*)proggy_clean_ttf_compressed_data_base85);
+
+	for (auto& font : fonts)
+	{
+		font.EndFrame(*this);
+	}
+
+	for (auto& renderList : renderLists)
+	{
+		totalVertexCount += renderList->vertices.size();
+		totalIndexCount += renderList->indices.size();
+	}
+}
+
+void ArgonRenderManager::PostPresent()
+{
+	renderLists.clear();
+}
+
+void ArgonRenderManager::OnDestroy(IArgonRenderer* renderer)
+{
+	renderLists.clear();
+
+	for (auto& land : lands)
+	{
+		land.OnDestroy(renderer);
+	}
+	lands.clear();
+
+	while (!newFontRequests.empty())
+	{
+		NewFontRequest& query = newFontRequests.front();
+		free(query.fontBinary);
+		newFontRequests.pop();
+	}
+}
+
 void ArgonRenderManager::AddFontFromCompressed(void* data, size_t size)
 {
 	const uint32_t decompressedSize = stb_decompress_length((const uint8_t*)data);
 	void* decompressedData = malloc(decompressedSize);
 	stb_decompress((uint8_t*)decompressedData, (const uint8_t*)data, (uint32_t)size);
-	textureManager.fontFaceQueryQueue.emplace(decompressedData, decompressedSize);
+	newFontRequests.emplace(decompressedData, decompressedSize);
 }
 
 void ArgonRenderManager::AddFontFromCompressedBase85(const uint8_t* base85)
@@ -1335,67 +1249,128 @@ void ArgonRenderManager::AddFontFromFile(const std::filesystem::path& path)
 	file.read((char*)binary, size);
 	file.close();
 
-	textureManager.fontFaceQueryQueue.emplace(binary, size);
-}
-
-void ArgonRenderManager::Awake()
-{
-	sharedData.renderManager = this;
-
-	textureManager.Awake(sharedData);
-}
-
-void ArgonRenderManager::StartFrame()
-{
-	textureManager.StartFrame();
-
-	totalVertexCount = totalIndexCount = 0;
-}
-
-void ArgonRenderManager::EndFrame()
-{
-	if (textureManager.fontFaces.empty())
-		AddFontFromCompressedBase85((const uint8_t*)proggy_clean_ttf_compressed_data_base85);
-
-	textureManager.EndFrame(sharedData);
-
-	for (auto& renderList : renderLists)
-	{
-		totalVertexCount += renderList->vertices.size();
-		totalIndexCount += renderList->indices.size();
-	}
-}
-
-void ArgonRenderManager::PostPresent()
-{
-	for (auto& renderList : renderLists)
-	{
-		delete renderList;
-	}
-	renderLists.clear();
-}
-
-void ArgonRenderManager::OnDestroy(IArgonRenderer* renderer)
-{
-	for (auto& renderList : renderLists)
-	{
-		renderList->Clear();
-		delete renderList;
-	}
-	renderLists.clear();
-
-	for (auto& atlas : textureManager.atlases)
-	{
-		atlas.OnDestroy(renderer);
-	}
-	textureManager.atlases.clear();
-	textureManager.glyphParser = nullptr;
+	newFontRequests.emplace(binary, size);
 }
 
 ArTextureID ArgonRenderManager::GetDefaultTexture() const
 {
-	if (textureManager.atlases.empty())
+	if (lands.empty())
 		return nullptr;
 
-	return textureManager.atlases[0].GetTexture();
+	return lands[0].GetTexture();
+}
+
+ArGlyphInfo* ArgonRenderManager::TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags) const
+{
+	for (auto& font : fonts)
+	{
+		ArGlyphInfo* glyphInfo = font.GetGlyphNoFallback(codepoint, size, flags);
+		if (glyphInfo)
+			return glyphInfo;
+	}
+	return nullptr;
+}
+
+std::vector<ArGlyphInfo*> ArgonRenderManager::TryGetGlyphs(ArStringView text, uint32_t size, ArGlyphFlag flags) const
+{
+	std::vector<uint32_t> codePoints = ArHelp::Utf8::DecodeToCodepoints(text);
+	std::vector<ArGlyphInfo*> glyphInfos;
+	glyphInfos.reserve(codePoints.size());
+	for (auto& code : codePoints)
+	{
+		glyphInfos.push_back(TryGetGlyph(code, size, flags));
+	}
+	return glyphInfos;
+}
+
+ArVec2 ArgonRenderManager::CalcTextSize(ArStringView text, uint32_t size, ArGlyphFlag flags) const
+{
+	std::vector<ArGlyphInfo*> glyphInfos = TryGetGlyphs(text, size, flags);
+	ArVec2 textSize = ArVec2(0, 0);
+	for (auto& glyphInfo : glyphInfos)
+	{
+		if (!glyphInfo)
+			continue;
+		textSize.x += glyphInfo->advanceX;
+		textSize.y = ArMax(textSize.y, glyphInfo->size.y);
+	}
+	ArVec2 padding = ArVec2(0.5f, 0.5f);
+	textSize.x += padding.x * 2;
+	textSize.y += padding.y * 2;
+	textSize.x = ArMax(textSize.x, 1.0f);
+	textSize.y = ArMax(textSize.y, 1.0f);
+	return textSize;
+}
+
+ArgonRenderManager::Territory ArgonRenderManager::AllocateTerritory(int width, int height)
+{
+	if (width <= 0 || height <= 0)
+		return {};
+
+	stbrp_rect rect = {};
+	rect.w = width;
+	rect.h = height;
+
+	auto landIt = lands.begin();
+
+	Territory territory = Territory();
+	territory.size = ArIntVec2(width, height);
+	do
+	{
+		if (landIt == lands.end())
+		{
+			lands.emplace_back();
+			landIt = std::prev(lands.end());
+		}
+		auto& land = *landIt;
+
+		if (stbrp_pack_rects(&land.rectPackerContext, &rect, 1))
+		{
+			territory.landIndex = landIt - lands.begin();
+			territory.position = ArIntVec2(rect.x, rect.y);
+			break;
+		}
+
+		landIt++;
+	} while (!rect.was_packed);
+	territories.push_back(territory);
+	return territory;
+}
+
+void ArgonRenderManager::BuildBaseTerritories(ArRenderListSharedData& sharedData)
+{
+	Territory antiAliasingGlyph = AllocateTerritory(64, 64);
+	ArTextureLand& land = lands[antiAliasingGlyph.landIndex];
+	for (int n = 0; n < 64; n++)
+	{
+		uint32_t y = n;
+		uint32_t line_width = n;
+		uint32_t pad_left = (antiAliasingGlyph.size.x - line_width) / 2;
+		uint32_t pad_right = antiAliasingGlyph.size.x - (pad_left + line_width);
+
+
+		uint32_t* write_ptr = &land.pixels[antiAliasingGlyph.position.x + ((antiAliasingGlyph.position.y + y) * land.size.x)];
+		for (uint32_t i = 0; i < pad_left; i++)
+			*(write_ptr + i) = AR_COL32(255, 255, 255, 0);
+
+		for (uint32_t i = 0; i < line_width; i++)
+			*(write_ptr + pad_left + i) = AR_COL32_WHITE;
+
+		for (uint32_t i = 0; i < pad_right; i++)
+			*(write_ptr + pad_left + line_width + i) = AR_COL32(255, 255, 255, 0);
+
+		ArVec2 uv0 = ArVec2(antiAliasingGlyph.position.x + pad_left - 1, antiAliasingGlyph.position.y + y) * land.uvScale;
+		ArVec2 uv1 = ArVec2(antiAliasingGlyph.position.x + pad_left + line_width + 1, antiAliasingGlyph.position.y + y + 1) * land.uvScale;
+		float half_v = (uv0.y + uv1.y) * 0.5f;
+		sharedData.uvOfBakeLines[n] = ArVec4(uv0.x, half_v, uv1.x, half_v);
+	}
+
+	Territory whitePixel = AllocateTerritory(2, 2);
+	for (int y = 0; y < whitePixel.size.y; y++)
+	{
+		uint32_t* write_ptr = &land.pixels[whitePixel.position.x + ((whitePixel.position.y + y) * land.size.x)];
+		for (int x = 0; x < whitePixel.size.x; x++)
+			*(write_ptr + x) = AR_COL32_WHITE;
+	}
+	sharedData.uvOfWhitInTexture = ArVec2(whitePixel.position.x + 0.5f, whitePixel.position.y + 0.5f) * land.uvScale;
 }

@@ -15,7 +15,7 @@
     <ClCompile Include="..\..\ArgonContext.cpp">
       <Filter>ArgonGui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\ArgonCore.cpp">
+    <ClCompile Include="..\..\ArgonGui.cpp">
       <Filter>ArgonGui</Filter>
     </ClCompile>
     <ClCompile Include="..\..\ArgonGraphic.cpp">
@@ -36,9 +36,6 @@
     <ClCompile Include="..\..\Backends\ArgonWin32Platform.cpp">
       <Filter>ArgonGui\Backends</Filter>
     </ClCompile>
-    <ClCompile Include="Demo.cpp">
-      <Filter>Main</Filter>
-    </ClCompile>
     <ClCompile Include="Main.cpp">
       <Filter>Main</Filter>
     </ClCompile>
@@ -47,7 +44,7 @@
     <ClInclude Include="..\..\ArgonContext.h">
       <Filter>ArgonGui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\ArgonCore.h">
+    <ClInclude Include="..\..\ArgonGui.h">
       <Filter>ArgonGui</Filter>
     </ClInclude>
     <ClInclude Include="..\..\ArgonGraphic.h">
@@ -76,6 +73,9 @@
     </ClInclude>
     <ClInclude Include="Main.h">
       <Filter>Main</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ArgonTemplate.h">
+      <Filter>ArgonGui</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

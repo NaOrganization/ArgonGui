@@ -1,9 +1,5 @@
-﻿#include "ArgonCore.h"
+﻿#include "ArgonGui.h"
 #include <stack>
-
-// ---------------------------------------------------------- //
-// !. ArgonGraphicElement Implementation
-// ---------------------------------------------------------- //
 
 ArGraphicElement::~ArGraphicElement()
 {
@@ -26,7 +22,7 @@ void ArGraphicElement::Awaken(ArgonContext& context)
 	for (auto& child : children)
 	{
 		child->layer = layer;
-		child->boundingBox.position = boundingBox.position + boundingBox.localPosition;
+		child->boundingBox.position = *boundingBox.position + *boundingBox.localPosition;
 		child->Awaken(context);
 	}
 	for (auto& [typeIndex, components] : componentMap)
@@ -52,7 +48,7 @@ void ArGraphicElement::StartFrame(ArgonContext& context)
 
 	for (auto& child : children)
 	{
-		child->boundingBox.position = boundingBox.position + boundingBox.localPosition;
+		child->boundingBox.position = *boundingBox.position + *boundingBox.localPosition;
 		child->StartFrame(context);
 	}
 	for (auto& [_, components] : componentMap)
@@ -158,9 +154,81 @@ ArGraphicElement* ArGraphicElement::GetChild(size_t index) const
 	return *it;
 }
 
-// ---------------------------------------------------------- //
-// !. ArgonGraphicPrimRenderListElement Implementation
-// ---------------------------------------------------------- //
+void ArGFloatAnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+{
+	if (!processing)
+		return;
+	if (spentTime >= length)
+	{
+		processing = false;
+		spentTime = 0ms;
+		value = endPoint;
+		return;
+	}
+	spentTime += context.GetDeltaTimeInArDuration();
+	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
+}
+
+void ArGFloatAnimatorComp::StartNewProcess(float start, float end, ArDuration length)
+{
+	processing = true;
+	spentTime = 0ms;
+	startPoint = start;
+	endPoint = end;
+	this->length = length;
+}
+
+void ArGVec2AnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+{
+	if (!processing)
+		return;
+	if (spentTime >= length)
+	{
+		processing = false;
+		spentTime = 0ms;
+		value = endPoint;
+		return;
+	}
+	spentTime += context.GetDeltaTimeInArDuration();
+	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
+}
+
+void ArGVec2AnimatorComp::StartNewProcess(ArVec2 start, ArVec2 end, ArDuration length)
+{
+	processing = true;
+	spentTime = 0ms;
+	startPoint = start;
+	endPoint = end;
+	this->length = length;
+}
+
+bool ArGPolygonCollisionComp::IsInBounds(ArVec2 pos)
+{
+	if (!working)
+		return false;
+	bool inside = false;
+	size_t n = bounds.size();
+
+	for (size_t i = 0, j = n - 1; i < n; j = i++)
+	{
+		bool intersect = ((bounds[i].y > pos.y) != (bounds[j].y > pos.y)) &&
+			(pos.x < (bounds[j].x - bounds[i].x) * (pos.y - bounds[i].y) / (bounds[j].y - bounds[i].y) + bounds[i].x);
+
+		if (intersect)
+			inside = !inside;
+	}
+
+	return inside;
+}
+
+void ArGPolygonCollisionComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+{
+	if (!working)
+		return;
+	const ArgonInputManager& inputManager = context.inputManager;
+	ArVec2 currentMousePos = inputManager.GetMousePosition() - owner.boundingBox.GetActualPosition();
+	hovering = IsInBounds(currentMousePos);
+}
 
 void ArGraphicPrimRenderListElement::Awake(const ArgonContext& context)
 {
@@ -173,9 +241,72 @@ void ArGraphicPrimRenderListElement::OnUpdate(const ArgonContext& context)
 	boundingBox.size = context.inputManager.GetDisplayState().size;
 }
 
-// ---------------------------------------------------------- //
-// !. ArgonGraphicLayer Implementation
-// ---------------------------------------------------------- //
+void ArGraphicFocusSelectorElement::Awake(const ArgonContext& context)
+{
+	focusable = interactive = false;
+
+	alphaAnimation = new ArGFloatAnimatorComp(0.f, [](float t) { return t; });
+	positionAnimation = new ArGVec2AnimatorComp(ArVec2(0.f, 0.f), [](float t) { return ArVec2(t, t); });
+	sizeAnimation = new ArGVec2AnimatorComp(ArVec2(0.f, 0.f), [](float t) { return ArVec2(t, t); });
+
+	AddComponent(typeid(ArGFloatAnimatorComp), alphaAnimation);
+	AddComponent(typeid(ArGVec2AnimatorComp), positionAnimation);
+	AddComponent(typeid(ArGVec2AnimatorComp), sizeAnimation);
+
+	boundingBox.size = context.inputManager.GetDisplayState().size;
+}
+
+void ArGraphicFocusSelectorElement::OnUpdate(const ArgonContext& context)
+{
+	visible = context.inputManager.GetLastInputDevice() == ArInputDevice::Gamepad;
+
+	if (!visible)
+		return;
+
+	if (selected && context.graphicManager.focusingElement == nullptr)
+	{
+		alphaAnimation->StartNewProcess(255.f, 0.f, 500ms);
+	}
+	else if (!selected && context.graphicManager.focusingElement != nullptr)
+	{
+		alphaAnimation->StartNewProcess(0.f, 255.f, 500ms);
+		boundingBox.position = context.graphicManager.focusingElement->boundingBox.GetActualPosition() - ArVec2(5.f, 5.f);
+		boundingBox.size = *context.graphicManager.focusingElement->boundingBox.size + ArVec2(10.f, 10.f);
+	}
+
+	selected = context.graphicManager.focusingElement != nullptr;
+
+	if (!selected)
+		return;
+
+	if (lastFocusBoundingBox != context.graphicManager.focusingElement->boundingBox)
+	{
+		ArVec2 size = *context.graphicManager.focusingElement->boundingBox.size + ArVec2(10.f, 10.f);
+		ArVec2 position = context.graphicManager.focusingElement->boundingBox.GetActualPosition() - ArVec2(5.f, 5.f);
+
+		if (lastFocusElement != context.graphicManager.focusingElement)
+		{
+			positionAnimation->StartNewProcess(*boundingBox.position, position, 200ms);
+		}
+		else
+		{
+			positionAnimation->value = position;
+		}
+
+		sizeAnimation->StartNewProcess(*boundingBox.size, size, 300ms);
+	}
+
+	lastFocusElement = context.graphicManager.focusingElement;
+	lastFocusBoundingBox = context.graphicManager.focusingElement->boundingBox;
+
+	boundingBox.position = positionAnimation->value;
+	boundingBox.size = sizeAnimation->value;
+}
+
+void ArGraphicFocusSelectorElement::OnRender(const ArgonContext& context)
+{
+	renderList->AddRect(boundingBox.GetRect(), AR_COL32(255.f, 255.f, 255.f, alphaAnimation->value), 2.f);
+}
 
 ArGraphicLayer::~ArGraphicLayer()
 {
@@ -325,10 +456,6 @@ void ArGraphicLayer::UnlockFocus()
 	lockFocus = false;
 }
 
-// ---------------------------------------------------------- //
-// !. ArgonGraphicManager Implementation
-// ---------------------------------------------------------- //
-
 ArgonGraphicManager::~ArgonGraphicManager()
 {
 	for (ArGraphicLayer* layer : layers)
@@ -342,6 +469,7 @@ void ArgonGraphicManager::Awake()
 {
 	backgroundLayer->AddElement(backgroundRenderListElement);
 	foregroundLayer->AddElement(foregroundRenderListElement);
+	foregroundLayer->AddElement(focusSelectorElement);
 }
 
 void ArgonGraphicManager::StartFrame(ArgonContext& context)
@@ -420,84 +548,4 @@ ArGraphicLayer* ArgonGraphicManager::AddLayer(ArLayerAdditionPriority priority)
 	// 2. push the new layer to the position
 	layers.insert(baseIt + offset, newLayer);
 	return newLayer;
-}
-
-// ---------------------------------------------------------- //
-// !. Basic Components Implementation
-// ---------------------------------------------------------- //
-
-void ArGFloatAnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
-{
-	if (!processing)
-		return;
-	if (spentTime >= length)
-	{
-		processing = false;
-		spentTime = 0ms;
-		value = endPoint;
-		return;
-	}
-	spentTime += context.GetDeltaTimeInArDuration();
-	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
-}
-
-void ArGFloatAnimatorComp::StartNewProcess(float start, float end, ArDuration length)
-{
-	processing = true;
-	spentTime = 0ms;
-	startPoint = start;
-	endPoint = end;
-	this->length = length;
-}
-
-void ArGVec2AnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
-{
-	if (!processing)
-		return;
-	if (spentTime >= length)
-	{
-		processing = false;
-		spentTime = 0ms;
-		value = endPoint;
-		return;
-	}
-	spentTime += context.GetDeltaTimeInArDuration();
-	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
-}
-
-void ArGVec2AnimatorComp::StartNewProcess(ArVec2 start, ArVec2 end, ArDuration length)
-{
-	processing = true;
-	spentTime = 0ms;
-	startPoint = start;
-	endPoint = end;
-	this->length = length;
-}
-
-bool ArGPolygonCollisionComp::IsInBounds(ArVec2 pos)
-{
-	if (!working)
-		return false;
-	bool inside = false;
-	size_t n = bounds.size();
-
-	for (size_t i = 0, j = n - 1; i < n; j = i++)
-	{
-		bool intersect = ((bounds[i].y > pos.y) != (bounds[j].y > pos.y)) &&
-			(pos.x < (bounds[j].x - bounds[i].x) * (pos.y - bounds[i].y) / (bounds[j].y - bounds[i].y) + bounds[i].x);
-
-		if (intersect)
-			inside = !inside;
-	}
-
-	return inside;
-}
-
-void ArGPolygonCollisionComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
-{
-	if (!working)
-		return;
-	const ArgonInputManager& inputManager = context.inputManager;
-	ArVec2 currentMousePos = inputManager.GetMousePosition() - owner.boundingBox.GetActualPosition();
-	hovering = IsInBounds(currentMousePos);
 }

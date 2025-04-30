@@ -5,14 +5,14 @@
 #include <tuple>
 #include <iostream>
 
-#include <ArgonCore.h>
+#include <ArgonGui.h>
 #include <Backends/ArgonWin32Platform.h>
 #include <Backends/ArgonDx11Renderer.h>
 #include <Backends/ArgonFreeTypeGlyphParser.h>
 
-#include "Demo.h"
-
 #include <fmt/core.h>
+
+#include "Demo.h"
 
 #pragma comment(lib, "d3d11.lib")
 

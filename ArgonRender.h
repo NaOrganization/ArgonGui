@@ -3,20 +3,9 @@
 #include <optional>
 #include <future>
 
-#define AR_COL32_R_SHIFT    0
-#define AR_COL32_G_SHIFT    8
-#define AR_COL32_B_SHIFT    16
-#define AR_COL32_A_SHIFT    24
-#define AR_COL32_A_MASK     0xFF000000
-
-#define AR_COL32(R,G,B,A)    (((uint32_t)(A)<<AR_COL32_A_SHIFT) | ((uint32_t)(B)<<AR_COL32_B_SHIFT) | ((uint32_t)(G)<<AR_COL32_G_SHIFT) | ((uint32_t)(R)<<AR_COL32_R_SHIFT))
-#define AR_COL32_WHITE       AR_COL32(255,255,255,255)  // Opaque white = 0xFFFFFFFF
-#define AR_COL32_BLACK       AR_COL32(0,0,0,255)        // Opaque black
-#define AR_COL32_BLACK_TRANS AR_COL32(0,0,0,0)          // Transparent black = 0x00000000
-
-// ---------------------------------------------------------- //
-//  !. Enum class declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonRender] Enum class declarations
+// ----------------------------------------------------------- //
 
 // [FLAGS] [ArgonRenderSystem] - Flags for rendering.
 enum class ArRenderFlag : uint32_t
@@ -41,7 +30,97 @@ enum class ArGlyphFlag : uint32_t
 };
 
 // ----------------------------------------------------------- //
-//  !. Rendering basic structures
+//  [ARGON] [ArgonRender] Interface declarations
+// ----------------------------------------------------------- //
+
+// [INTERFACE] [ArgonRenderSystem] - Glyph parser initialization interface. This interface is used to initialize font face from font files.
+class IArGlyphParserConfig
+{
+public:
+	virtual ~IArGlyphParserConfig() {}
+};
+
+// [INTERFACE] [ArgonRenderSystem] - Glyph parser interface. This interface is used to parse glyphs from font files.
+class IArgonGlyphParser
+{
+public:
+	class GlyphParseResult final
+	{
+	public:
+		ArGlyphInfo* glyphInfo = nullptr;
+		uint32_t* pixels = nullptr;
+	};
+	class FontFaceInitResult final
+	{
+	public:
+		std::string name = {};
+		ArGuiID fontId = 0;
+	};
+
+	virtual ~IArgonGlyphParser() {}
+
+	virtual bool Awake(const IArGlyphParserConfig& config) = 0;
+
+	virtual void OnDestroy() = 0;
+
+	virtual bool HasGlyph(ArGuiID fontId, uint32_t codepoint) const = 0;
+
+	virtual std::optional<FontFaceInitResult> InitFontFace(uint8_t* binary, size_t size) = 0;
+
+	virtual std::optional<GlyphParseResult> ParseGlyph(const ArFont& font, const ArGlyphKey& key) = 0;
+};
+
+// [INTERFACE] [ArgonRenderSystem] - Renderer initialization interface. This interface is used to create renderer.
+class IArRendererConfig
+{
+public:
+	virtual ~IArRendererConfig() {}
+};
+
+// [INTERFACE] [ArgonRenderSystem] - Renderer interface. This interface is used to create renderer.
+class IArRenderCustomCreateConfig
+{
+public:
+	virtual ~IArRenderCustomCreateConfig() {}
+};
+
+// [INTERFACE] [ArgonRenderSystem] - Renderer interface. This interface is used to create renderer.
+class IArgonRenderer
+{
+public:
+	virtual ArString Name() const = 0;
+
+	virtual bool Awake(const IArRendererConfig& config) = 0;
+
+	virtual void StartFrame(const ArgonRenderManager& renderManager) = 0;
+
+	virtual void EndFrame(const ArgonRenderManager& renderManager, const ArDisplayState& displayState) = 0;
+
+	virtual void OnDestroy() = 0;
+
+	virtual ArTextureID CreateTexture(ArIntVec2 size, const void* pixels) = 0;
+
+	virtual ArShaderID CreateCustomShader(const IArRenderCustomCreateConfig& config) = 0;
+
+	virtual void SetCurrentVertexShader(ArShaderID shader) = 0;
+
+	virtual bool SetVertexShaderConstantBuffer(const void* data, size_t size) = 0;
+
+	virtual void SetCurrentPixelShader(ArShaderID shader) = 0;
+
+	virtual bool SetPixelShaderConstantBuffer(const void* data, size_t size) = 0;
+
+	virtual void ReleaseTexture(ArTextureID texture) = 0;
+
+	virtual void ReleaseCustomShader(ArShaderID shader) = 0;
+
+	virtual void Present(const ArgonRenderManager& renderManager, const ArDisplayState& displayState) = 0;
+
+	virtual bool IsRunning() const = 0;
+};
+
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonRender] Base rendering pipeline struct
 // ----------------------------------------------------------- //
 
 // [STRUCT] [ArgonRenderSystem] - Vertex structure.
@@ -113,7 +192,7 @@ public:
 	ArRenderListFlag listFlags = ArRenderListFlag::UseAntiAliasing;
 
 	ArRenderList(ArRenderListSharedData* sharedData);
-	~ArRenderList() {}
+	~ArRenderList() { Clear(); }
 
 	void AddLine(const ArVec2& from, const ArVec2& to, uint32_t color, float thickness = 1.f);
 
@@ -191,25 +270,25 @@ protected:
 };
 
 // ----------------------------------------------------------- //
-//  !. About Texture Atlas
+//  [ARGON] [ArgonRender] Texture management
 // ----------------------------------------------------------- //
 
-// [CLASS] [ArgonRenderSystem] - Texture atlas class. This class is used to store all the textures in one atlas.
-class ArTextureAtlas final
+// [CLASS] [ArgonRenderSystem] - Texture land class. This class is used to store all the textures in one land.
+class ArTextureLand final
 {
 public:
-	const ArIntVec2 atlasSize = ArIntVec2(4096, 4096);
-	const ArVec2 uvScale = ArVec2(1.f / atlasSize.x, 1.f / atlasSize.y);
+	const ArIntVec2 size = ArIntVec2(4096, 4096);
+	const ArVec2 uvScale = ArVec2(1.f / size.x, 1.f / size.y);
 
 	stbrp_context rectPackerContext = {};
-	std::vector<stbrp_node> nodes = {};
+	std::vector<stbrp_node> nodes = std::vector<stbrp_node>(size.x);
 
-	uint32_t* pixels = nullptr; // use rgba32 format.
+	uint32_t* pixels = new uint32_t[size.x * size.y]();
 	mutable ArTextureID textureId = nullptr;
 	mutable bool dirty = false;
 public:
-	ArTextureAtlas() : nodes(atlasSize.x), pixels(new uint32_t[atlasSize.x * atlasSize.y]()) { stbrp_init_target(&rectPackerContext, atlasSize.x, atlasSize.y, nodes.data(), atlasSize.x); }
-	~ArTextureAtlas() {}
+	ArTextureLand() { stbrp_init_target(&rectPackerContext, size.x, size.y, nodes.data(), size.x); }
+	~ArTextureLand() {}
 
 	void OnDestroy(IArgonRenderer* renderer);
 
@@ -218,45 +297,50 @@ public:
 	ArTextureID GetTexture() const { if (textureId != nullptr) return textureId; return nullptr; }
 };
 
-// [CLASS] [ArgonRenderSystem] - Font face class. This class is used to store all the glyphs for a font face.
-class ArFontFace final
+// [STRUCT] [ArgonRenderSystem] - Glyph key structure. This structure is used to store the key for a glyph.
+class ArGlyphKey final
 {
 public:
-	class GlyphCacheKey final
+	uint32_t codepoint = 0;
+	uint32_t size = 0;
+	ArGlyphFlag flags = ArGlyphFlag::None;
+public:
+	bool operator==(const ArGlyphKey& other) const
 	{
-	public:
-		uint32_t codepoint = 0;
-		uint32_t size = 0;
-		ArGlyphFlag flags = ArGlyphFlag::None;
-	public:
-		bool operator==(const GlyphCacheKey& other) const
+		return codepoint == other.codepoint && size == other.size && flags == other.flags;
+	}
+	struct Hash final
+	{
+		size_t operator()(const ArGlyphKey& key) const
 		{
-			return codepoint == other.codepoint && size == other.size && flags == other.flags;
+			return std::hash<uint32_t>()(key.codepoint) ^ std::hash<uint32_t>()(key.size) ^ std::hash<uint32_t>()(static_cast<uint32_t>(key.flags));
 		}
-		struct Hash final
-		{
-			size_t operator()(const GlyphCacheKey& key) const
-			{
-				return std::hash<uint32_t>()(key.codepoint) ^ std::hash<uint32_t>()(key.size) ^ std::hash<uint32_t>()(static_cast<uint32_t>(key.flags));
-			}
-		};
+	};
 
-		GlyphCacheKey() {}
-		GlyphCacheKey(const uint32_t& codepoint, const uint32_t& size, const ArGlyphFlag& flags)
-			: codepoint(codepoint), size(size), flags(flags) {
-		}
-	};
-	class GlyphInfo final
-	{
-	public:
-		uint32_t textureAtlasIndex = 0;
-		bool visible = false;
-		bool colored = false;
-		ArVec2 min = ArVec2(0.f, 0.f);
-		ArVec2 size = ArVec2(0.f, 0.f);
-		ArRect uv = ArRect();
-		float advanceX = 0.f;
-	};
+	ArGlyphKey() {}
+	ArGlyphKey(const uint32_t& codepoint, const uint32_t& size, const ArGlyphFlag& flags)
+		: codepoint(codepoint), size(size), flags(flags) {
+	}
+};
+
+// [STRUCT] [ArgonRenderSystem] - Glyph info structure. This structure is used to store the info for a glyph.
+class ArGlyphInfo final
+{
+public:
+	uint32_t textureAtlasIndex = 0;
+	bool visible = false;
+	bool colored = false;
+	ArVec2 min = ArVec2(0.f, 0.f);
+	ArVec2 size = ArVec2(0.f, 0.f);
+	ArRect uv = ArRect();
+	float advanceX = 0.f;
+};
+
+// [CLASS] [ArgonRenderSystem] - Font face class. This class is used to store all the glyphs for a font face.
+class ArFont final
+{
+public:
+	using GlyphCacheKey = ArGlyphKey;
 	class GlyphMappingTask final
 	{
 	public:
@@ -267,101 +351,65 @@ public:
 			: key(key), pixels(pixels) {
 		}
 	};
-
-	ArTextureManager& textureManager;
+	
+	IArgonGlyphParser* glyphParser = nullptr;
 
 	const ArGuiID fontId = 0;
-	const std::string name = {};
+	const ArString name = {};
 
 	std::queue<GlyphMappingTask> mappingQueue = {};
 
-	std::unordered_map<GlyphCacheKey, GlyphInfo, GlyphCacheKey::Hash> glyphs = {};
-	GlyphInfo* fallbackGlyph = nullptr;
+	std::unordered_map<GlyphCacheKey, ArGlyphInfo, GlyphCacheKey::Hash> glyphs = {};
+	ArGlyphInfo* fallbackGlyph = nullptr;
 public:
-	ArFontFace(ArTextureManager& textureManager, ArGuiID fontId, const std::string& name)
-		: textureManager(textureManager), fontId(fontId), name(name) {
-	}
-	ArFontFace& operator=(const ArFontFace&) = delete;
-	~ArFontFace() {}
+	ArFont(IArgonGlyphParser* glyphParser, ArGuiID fontId, ArStringView name)
+		: glyphParser(glyphParser), fontId(fontId), name(name) { }
+	ArFont& operator=(const ArFont&) = delete;
+	~ArFont() {}
 
 	void Awake();
 
-	void EndFrame();
+	void EndFrame(ArgonRenderManager& renderManager);
 
-	GlyphInfo* GetGlyphNoFallback(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None);
+	ArGlyphInfo* GetGlyphNoFallback(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None);
 
-	GlyphInfo* TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None);
+	ArGlyphInfo* TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None);
 private:
-	GlyphInfo* FindGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None);
+	ArGlyphInfo* FindGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None);
 };
 
-// [CLASS] [ArgonRenderSystem] - Texture manager class. This class is used to manage all the textures and font faces.
-class ArTextureManager final
-{
-public:
-	class Territory final
-	{
-	public:
-		int atlasIndex = -1;
-		ArIntVec2 size = ArIntVec2();
-		ArIntVec2 position = ArIntVec2(-1, -1);
-
-		ArRect GetRect() const { return ArRect((float)position.x, (float)position.y, (float)position.x + (float)size.x, (float)position.y + (float)size.y); }
-
-		ArRect GetUV(ArIntVec2 atlasSize) const { const ArRect& rect = GetRect(); return ArRect(rect.min.x / atlasSize.x, rect.min.y / atlasSize.y, rect.max.x / atlasSize.x, rect.max.y / atlasSize.y); }
-
-		bool IsValid() const { return position.x >= 0.f && position.y >= 0.f; }
-	};
-	class FontFaceQuery final
-	{
-	public:
-		void* fontBinary = nullptr;
-		size_t binarySize = 0;
-
-		FontFaceQuery(void* binary, size_t size) : fontBinary(binary), binarySize(size) {}
-	};
-public:
-	IArgonGlyphParser* glyphParser = nullptr;
-	std::vector<ArTextureAtlas> atlases = {}; // normally only one atlas, except for very large glyphs
-	mutable std::vector<ArFontFace> fontFaces = {};
-	std::vector<Territory> territories = {};
-	std::queue<FontFaceQuery> fontFaceQueryQueue = {};
-
-	ArGuiID antiAliasingGlyphTerritoryId = 0;
-	ArGuiID whitePixelTerritoryId = 0;
-	bool buildedBaseTerritories = false;
-public:
-	ArTextureManager() {}
-	ArTextureManager(const ArTextureManager&) = delete;
-	ArTextureManager& operator=(const ArTextureManager&) = delete;
-	~ArTextureManager() {}
-
-	void Awake(ArRenderListSharedData& sharedData);
-
-	void StartFrame();
-
-	void EndFrame(ArRenderListSharedData& sharedData);
-
-	Territory AllocateTerritory(int width, int height);
-
-	ArFontFace::GlyphInfo* TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None) const;
-
-	std::vector<ArFontFace::GlyphInfo*> TryGetGlyphs(ArStringView text, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None) const;
-
-	ArVec2 CalcTextSize(ArStringView text, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None) const;
-private:
-	void BuildBaseTerritories(ArRenderListSharedData& sharedData);
-};
-
-// ------------------------------------------------------------ //
-//  !. ArgonRenderManager declaration
-// ------------------------------------------------------------ //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonRender] ArgonRenderManager declaration
+// ----------------------------------------------------------- //
 
 // [CLASS] [ArgonRenderSystem] - Render manager class. This class is used to manage all the render lists and textures.
 class ArgonRenderManager final
 {
 public:
-	ArTextureManager textureManager = {};
+	class Territory final
+	{
+	public:
+		uint32_t landIndex = 0;
+		ArIntVec2 size = ArIntVec2();
+		ArIntVec2 position = ArIntVec2();
+
+		ArRect GetRect() const { return ArRect(position, position + size); }
+	};
+	class NewFontRequest final
+	{
+	public:
+		void* fontBinary = nullptr;
+		size_t binarySize = 0;
+
+		NewFontRequest(void* binary, size_t size) : fontBinary(binary), binarySize(size) {}
+	};
+public:
+	std::vector<ArTextureLand> lands = {};
+	std::vector<Territory> territories = {};
+	mutable std::vector<ArFont> fonts = {};
+
+	std::queue<NewFontRequest> newFontRequests = {};
+
 	ArRenderListSharedData sharedData = {};
 	std::vector<ArRenderList*> renderLists = {};
 	size_t totalVertexCount = 0;
@@ -372,23 +420,9 @@ public:
 	ArgonRenderManager& operator=(const ArgonRenderManager&) = delete;
 	~ArgonRenderManager() {}
 
-	template<typename T, typename... Args>
-	T* AllocationRenderList(Args&&... args)
-	{
-		T* renderList = new T(&sharedData, std::forward<Args>(args)...);
-		renderLists.push_back(renderList);
-		return renderList;
-	}
-
-	void AddFontFromCompressed(void* data, size_t size);
-
-	void AddFontFromCompressedBase85(const uint8_t* base85);
-
-	void AddFontFromFile(const std::filesystem::path& path);
-
 	void Awake();
 
-	void StartFrame();
+	void StartFrame(IArgonGlyphParser* glyphParser);
 
 	void EndFrame();
 
@@ -396,88 +430,24 @@ public:
 
 	void OnDestroy(IArgonRenderer* renderer);
 
+	template<typename T, typename... Args>
+	T* AllocationRenderList(Args&&... args) { T* renderList = new T(&sharedData, std::forward<Args>(args)...); renderLists.push_back(renderList); return renderList; }
+
+	void AddFontFromCompressed(void* data, size_t size);
+
+	void AddFontFromCompressedBase85(const uint8_t* base85);
+
+	void AddFontFromFile(const std::filesystem::path& path);
+
 	ArTextureID GetDefaultTexture() const;
-};
 
-// ------------------------------------------------------------- //
-//  !. ArgonRenderSystem interface declarations
-// ------------------------------------------------------------- //
+	ArGlyphInfo* TryGetGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None) const;
 
-// [INTERFACE] [ArgonRenderSystem] - Glyph parser interface. This interface is used to parse glyphs from font files.
-class IArgonGlyphParser
-{
-public:
-	class GlyphParseResult final
-	{
-	public:
-		ArFontFace::GlyphInfo glyphInfo = ArFontFace::GlyphInfo();
-		uint32_t* pixels = nullptr;
-	};
-	class FontFaceInitResult final
-	{
-	public:
-		std::string name = {};
-		ArGuiID fontId = 0;
-	};
+	std::vector<ArGlyphInfo*> TryGetGlyphs(ArStringView text, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None) const;
 
-	virtual ~IArgonGlyphParser() {}
+	ArVec2 CalcTextSize(ArStringView text, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None) const;
 
-	virtual bool Awake() = 0;
-
-	virtual void OnDestroy() = 0;
-
-	virtual bool HasGlyph(ArGuiID fontId, uint32_t codepoint) const = 0;
-
-	virtual std::optional<FontFaceInitResult> InitFontFace(uint8_t* binary, size_t size) = 0;
-
-	virtual std::optional<GlyphParseResult> ParseGlyph(const ArFontFace& fontFace, const ArFontFace::GlyphCacheKey& key) = 0;
-};
-
-// [INTERFACE] [ArgonRenderSystem] - Renderer initialization interface. This interface is used to create renderer.
-class IArRendererConfig
-{
-public:
-	virtual ~IArRendererConfig() {}
-};
-
-// [INTERFACE] [ArgonRenderSystem] - Renderer interface. This interface is used to create renderer.
-class IArRenderCustomCreateConfig
-{
-public:
-	virtual ~IArRenderCustomCreateConfig() {}
-};
-
-// [INTERFACE] [ArgonRenderSystem] - Renderer interface. This interface is used to create renderer.
-class IArgonRenderer
-{
-public:
-	virtual std::string Name() const = 0;
-
-	virtual bool Awake(const IArRendererConfig& config) = 0;
-
-	virtual void StartFrame(const ArgonRenderManager& renderManager) = 0;
-
-	virtual void EndFrame(const ArgonRenderManager& renderManager, const ArDisplayState& displayState) = 0;
-
-	virtual void OnDestroy() = 0;
-
-	virtual ArTextureID CreateTexture(ArIntVec2 size, const void* pixels) = 0;
-
-	virtual ArShaderID CreateCustomShader(const IArRenderCustomCreateConfig& config) = 0;
-
-	virtual void SetCurrentVertexShader(ArShaderID shader) = 0;
-
-	virtual bool SetVertexShaderConstantBuffer(const void* data, size_t size) = 0;
-
-	virtual void SetCurrentPixelShader(ArShaderID shader) = 0;
-
-	virtual bool SetPixelShaderConstantBuffer(const void* data, size_t size) = 0;
-
-	virtual void ReleaseTexture(ArTextureID texture) = 0;
-
-	virtual void ReleaseCustomShader(ArShaderID shader) = 0;
-
-	virtual void Present(const ArgonRenderManager& renderManager, const ArDisplayState& displayState) = 0;
-
-	virtual bool IsRunning() const = 0;
+	Territory AllocateTerritory(int width, int height);
+private:
+	void BuildBaseTerritories(ArRenderListSharedData& sharedData);
 };

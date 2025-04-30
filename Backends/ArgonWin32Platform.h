@@ -1,5 +1,5 @@
-#pragma once
-#include "../ArgonCore.h"
+﻿#pragma once
+#include "../ArgonGui.h"
 #include <wtypes.h>
 #include <xinput.h>
 
@@ -28,7 +28,7 @@ public:
 public:
 	ArgonWin32Platform() {}
 
-	std::string Name() const override { return "Win32"; }
+	ArString Name() const override { return "Win32"; }
 	bool Awake(const IArPlatformConfig& config) override;
 	void OnDestroy() override;
 	void StartFrame(ArgonInputManager& inputManager) override;

@@ -1,5 +1,5 @@
 ﻿#include "ArgonFreeTypeGlyphParser.h"
-#include "../ArgonCore.h"
+#include "../ArgonGui.h"
 #include <freetype/ftmodapi.h>
 #include <freetype/ftglyph.h>
 #include <freetype/ftsynth.h>
@@ -51,7 +51,7 @@ void ArFreeTypeFontInfo::SetPixelHeight(uint32_t pixelHeight)
 	maxAdvanceWidth = (float)FT_CEIL(metrics.max_advance);
 }
 
-bool ArgonFreeTypeGlyphParser::Awake()
+bool ArgonFreeTypeGlyphParser::Awake(const IArGlyphParserConfig& config)
 {
 	ftMemory = new FT_MemoryRec_;
 	ftMemory->user = nullptr;
@@ -67,7 +67,7 @@ bool ArgonFreeTypeGlyphParser::Awake()
 
 void ArgonFreeTypeGlyphParser::OnDestroy()
 {
-	for (auto& fontInfo : fontFaces)
+	for (auto& fontInfo : fonts)
 	{
 		if (fontInfo.ftFace)
 		{
@@ -89,9 +89,9 @@ void ArgonFreeTypeGlyphParser::OnDestroy()
 
 bool ArgonFreeTypeGlyphParser::HasGlyph(ArGuiID fontId, uint32_t codepoint) const
 {
-	if (fontFaces.size() <= fontId)
+	if (fonts.size() <= fontId)
 		return false;
-	const ArFreeTypeFontInfo& fontInfo = fontFaces[fontId];
+	const ArFreeTypeFontInfo& fontInfo = fonts[fontId];
 	const FT_Face& ftFace = fontInfo.ftFace;
 
 	return FT_Get_Char_Index(ftFace, codepoint) != 0;
@@ -109,18 +109,18 @@ std::optional<ArgonFreeTypeGlyphParser::FontFaceInitResult> ArgonFreeTypeGlyphPa
 		FT_Done_Face(ftFace);
 		return std::nullopt;
 	}
-	fontFaces.emplace_back(ftFace);
+	fonts.emplace_back(ftFace);
 	FontFaceInitResult result = {};
 	result.name = ftFace->family_name;
-	result.fontId = (ArGuiID)(fontFaces.size() - 1);
+	result.fontId = (ArGuiID)(fonts.size() - 1);
 	return result;
 }
 
-std::optional<IArgonGlyphParser::GlyphParseResult> ArgonFreeTypeGlyphParser::ParseGlyph(const ArFontFace& fontFace, const ArFontFace::GlyphCacheKey& key)
+std::optional<IArgonGlyphParser::GlyphParseResult> ArgonFreeTypeGlyphParser::ParseGlyph(const ArFont& font, const ArGlyphKey& key)
 {
 	if (key.codepoint <= 0 || key.size <= 0)
 		return std::nullopt;
-	ArFreeTypeFontInfo& fontInfo = fontFaces[fontFace.fontId];
+	ArFreeTypeFontInfo& fontInfo = fonts[font.fontId];
 	FT_Face& ftFace = fontInfo.ftFace;
 
 	uint32_t glyphIndex = FT_Get_Char_Index(ftFace, key.codepoint);
@@ -150,7 +150,7 @@ std::optional<IArgonGlyphParser::GlyphParseResult> ArgonFreeTypeGlyphParser::Par
 	int offsetY = glyphSlot->bitmap_top;
 
 	IArgonGlyphParser::GlyphParseResult glyphParseResult = {};
-	ArFontFace::GlyphInfo& glyphInfo = glyphParseResult.glyphInfo;
+	ArGlyphInfo& glyphInfo = *new ArGlyphInfo;
 	glyphInfo.min = ArVec2((float)offsetX, fontInfo.ascender - (float)offsetY);
 	glyphInfo.size = ArVec2((float)width, (float)height);
 
@@ -159,6 +159,7 @@ std::optional<IArgonGlyphParser::GlyphParseResult> ArgonFreeTypeGlyphParser::Par
 	glyphInfo.colored = bitmap.pixel_mode == FT_PIXEL_MODE_BGRA;
 
 	glyphParseResult.pixels = new uint32_t[bitmap.width * bitmap.rows];
+	glyphParseResult.glyphInfo = &glyphInfo;
 	uint32_t w = bitmap.width;
 	uint32_t h = bitmap.rows;
 	const uint8_t* src = bitmap.buffer;

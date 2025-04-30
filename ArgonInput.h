@@ -1,8 +1,8 @@
-#pragma once
+﻿#pragma once
 
-// ---------------------------------------------------------- //
-//  !. Enum class declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonInput] Enum class declarations
+// ----------------------------------------------------------- //
 
 // [ENUM] [ArgonInputSystem] - Maps to the key codes used in the system.
 enum class ArKeyCode
@@ -164,9 +164,9 @@ public:
 	ArVec2 size = ArVec2();
 };
 
-// ---------------------------------------------------------- //
-//  !. Input event declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonInput] Input event declarations
+// ----------------------------------------------------------- //
 
 // [UNION] [ArInputEvent] - Input event structure.
 class ArInputEvent final
@@ -176,9 +176,9 @@ public:
 	ArInputEventData eventData = {};
 };
 
-// ---------------------------------------------------------- //
-//  !. Input state declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonInput] Devices states declarations
+// ----------------------------------------------------------- //
 
 // [STRUCT] [ArgonInputSystem] - State structure for input buttons.
 class ArButtonState final
@@ -251,9 +251,9 @@ public:
 	void HandleEvent(const ArInputEvent& event);
 };
 
-// ---------------------------------------------------------- //
-//  !. ArgonInputManager declaration
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonInput] ArgonInputManager declarations
+// ----------------------------------------------------------- //
 
 // [CLASS] [ArgonInputSystem] - The core element, managing all input events and states.
 class ArgonInputManager final
@@ -262,6 +262,8 @@ private:
 	std::queue<ArInputEvent> eventQueue = {};
 	std::queue<ArInputEvent> eventBuffer = {};
 	mutable std::mutex eventMutex;
+
+	ArInputDevice lastInputDevice = ArInputDevice::None;
 
 	ArMouseState mouseState = ArMouseState();
 	ArKeyboardState keyboardState = ArKeyboardState();
@@ -283,6 +285,8 @@ public:
 	void EndFrame();
 
 	void AddEvent(const ArInputEvent& event);
+
+	ArInputDevice GetLastInputDevice() const { return lastInputDevice; }
 
 	bool IsMouseButtonDown(ArMouseButton button) const;
 	bool IsMouseButtonHeld(ArMouseButton button) const;
@@ -314,9 +318,9 @@ private:
 	bool IsButtonClicked(const ArButtonState& buttonState, int clickCount) const;
 };
 
-// ---------------------------------------------------------- //
-//  !. ArgonPlatform Interface declaration
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonInput] Interfaces declarations
+// ----------------------------------------------------------- //
 
 // [INTERFACE] [ArgonInputSystem] - Interface for platform-specific configurations.
 class IArPlatformConfig
@@ -329,7 +333,7 @@ public:
 class IArgonPlatform
 {
 public:
-	virtual std::string Name() const = 0;
+	virtual ArString Name() const = 0;
 
 	virtual bool Awake(const IArPlatformConfig& config) = 0;
 
