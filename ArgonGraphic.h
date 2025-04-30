@@ -28,9 +28,9 @@ public:
 	virtual void OnRender(ArGraphicElement& owner) {};
 };
 
-// ---------------------------------------------------------- //
-// !. Element declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonGraphic] Base element
+// ----------------------------------------------------------- //
 
 // [CLASS] [ArgonGraphicSystem] - Render list with owner element.
 class ArGraphicRenderList final : public ArRenderList
@@ -159,9 +159,9 @@ public:
 	ArGraphicElement* GetElementByIndex(size_t index) const { if (index >= elements.size()) return nullptr; return elements[index]; }
 };
 
-// ---------------------------------------------------------- //
-// !. Basic Components declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonGraphic] Basic Components declarations
+// ----------------------------------------------------------- //
 
 // [CLASS] [ArgonGraphicSystem] - Float animator component. This component is used to animate a float value.
 class ArGFloatAnimatorComp : public IArGraphicComponent
@@ -238,9 +238,9 @@ public:
 	void OnUpdate(ArGraphicElement& owner, const ArgonContext& context) override;
 };
 
-// ------------------------------------------------------------- //
-// !. Graphic System Internal Elements declarations
-// ------------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonGraphic] Internal elements declarations
+// ----------------------------------------------------------- //
 
 // [CLASS] [ArgonGraphicSystem] - Render list element for the graphic system. Only for the render list.
 class ArGraphicPrimRenderListElement final : public ArGraphicElement 
@@ -270,7 +270,7 @@ public:
 };
 
 // ----------------------------------------------------------- //
-// ! ArgonThemeManager declarations
+//  [ARGON] [ArgonGraphic] ArgonThemeManager declarations
 // ----------------------------------------------------------- //
 
 class ArGraphicStyleProperty final
@@ -310,9 +310,9 @@ public:
 	ArgonGraphicThemeManager& operator=(const ArgonGraphicThemeManager&) = delete;
 	~ArgonGraphicThemeManager() {}
 
-	bool ImportStyleCollection(const IArGraphicStyleCollection& collection) { properties = collection.GetProperties(); return true; }
+	bool SetStyleCollection(const IArGraphicStyleCollection& collection) { properties = collection.GetProperties(); return true; }
 
-	bool ImportColorPalette(const IArGraphicColorPalette& palette) { colors = palette.GetColors(); return true; }
+	bool SetColorPalette(const IArGraphicColorPalette& palette) { colors = palette.GetColors(); return true; }
 
 	const ArGraphicStyleProperty& GetStyleProperty(ArStringView name) const
 	{
@@ -331,9 +331,9 @@ public:
 	}
 };
 
-// ---------------------------------------------------------- //
-// !. ArgonGraphicManager declarations
-// ---------------------------------------------------------- //
+// ----------------------------------------------------------- //
+//  [ARGON] [ArgonGraphic] ArgonGraphicManager declarations
+// ----------------------------------------------------------- //
 
 // [CLASS] [ArgonGraphicSystem] - The main graphic manager class. This class is used to manage all the graphic elements and layers.
 class ArgonGraphicManager final

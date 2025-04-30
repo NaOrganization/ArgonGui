@@ -2,16 +2,6 @@
 #include "ArgonGui.h"
 #include <fstream>
 
-// ---------------------------------------------------------- //
-// !. Default font data
-// ---------------------------------------------------------- //
-// ProggyClean.ttf
-// Copyright (c) 2004, 2005 Tristan Grimmer
-// MIT license (see License.txt in http://www.upperbounds.net/download/ProggyClean.ttf.zip)
-// Download and more information at http://upperbounds.net
-// ---------------------------------------------------------- //
-// File: 'ProggyClean.ttf' (41208 bytes)
-// ---------------------------------------------------------- //
 static const int8_t proggy_clean_ttf_compressed_data_base85[11980 + 1] =
 "7])#######hV0qs'/###[),##/l:$#Q6>##5[n42>c-TH`->>#/e>11NNV=Bv(*:.F?uu#(gRU.o0XGH`$vhLG1hxt9?W`#,5LsCp#-i>.r$<$6pD>Lb';9Crc6tgXmKVeU2cD4Eo3R/"
 "2*>]b(MC;$jPfY.;h^`IWM9<Lh2TlS+f-s$o6Q<BWH`YiU.xfLq$N;$0iR/GX:U(jcW2p/W*q?-qmnUCI;jHSAiFWM.R*kU@C=GH?a9wp8f$e.-4^Qg1)Q-GL(lf(r/7GrRgwV%MS=C#"
@@ -100,10 +90,6 @@ static const int8_t proggy_clean_ttf_compressed_data_base85[11980 + 1] =
 "GT4CPGT4CPGT4CPGT4CPGT4CPGT4CP-qekC`.9kEg^+F$kwViFJTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5KTB&5o,^<-28ZI'O?;xp"
 "O?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xpO?;xp;7q-#lLYI:xvD=#";
 
-// ---------------------------------------------------------- //
-// !. STB Decompress
-// ---------------------------------------------------------- //
-
 static uint32_t stb_decompress_length(const unsigned char* input)
 {
 	return (input[8] << 24) + (input[9] << 16) + (input[10] << 8) + input[11];
@@ -181,10 +167,6 @@ static uint32_t stb_adler32(uint32_t adler32, unsigned char* buffer, uint32_t bu
 	return (uint32_t)(s2 << 16) + (uint32_t)s1;
 }
 
-// ---------------------------------------------------------- //
-// !. Base85 Decode
-// ---------------------------------------------------------- //
-
 static uint32_t stb_decompress(unsigned char* output, const unsigned char* i, uint32_t /*length*/)
 {
 	if (stb__in4(0) != 0x57bC0000) return 0;
@@ -226,10 +208,6 @@ static void         Decode85(const unsigned char* src, unsigned char* dst)
 	}
 }
 
-// ---------------------------------------------------------- //
-// !. ArRenderListSharedData implementation
-// ---------------------------------------------------------- //
-
 ArRenderListSharedData::ArRenderListSharedData()
 {
 	circleSegmentMaxError = 0.3f;
@@ -245,10 +223,6 @@ ArRenderListSharedData::ArRenderListSharedData()
 	}
 	arcFastRadiusCutoff = ((circleSegmentMaxError) / (1 - cosf(3.14159265358979323846f / ArMax((float)(48), 3.14159265358979323846f))));
 }
-
-// ---------------------------------------------------------- //
-// !. ArRenderList implementation
-// ---------------------------------------------------------- //
 
 ArRenderList::ArRenderList(ArRenderListSharedData* sharedData)
 {
@@ -1052,10 +1026,6 @@ int ArRenderList::CalcCircleAutoSegmentCount(float radius) const
 		return ArClamp((((((int)ceilf(AR_PI / acosf(1 - ArMin((sharedData->circleSegmentMaxError), (radius)) / (radius)))) + 1) / 2) * 2), 4, 512);
 }
 
-// ---------------------------------------------------------- //
-// !. ArTextureAtlas implementation
-// ---------------------------------------------------------- //
-
 void ArTextureLand::OnDestroy(IArgonRenderer* renderer)
 {
 	if (pixels)
@@ -1066,10 +1036,6 @@ void ArTextureLand::OnDestroy(IArgonRenderer* renderer)
 	dirty = false;
 	renderer->ReleaseTexture(textureId);
 }
-
-// ---------------------------------------------------------- //
-// !. ArFontFace implementation
-// ---------------------------------------------------------- //
 
 ArGlyphInfo* ArFont::GetGlyphNoFallback(uint32_t codepoint, uint32_t size, ArGlyphFlag flags)
 {
