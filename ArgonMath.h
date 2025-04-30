@@ -7,9 +7,25 @@
 #include <immintrin.h>
 #endif
 
-// ---------------------------------------------------------- //
-//  !.Argon basic data type
-// ---------------------------------------------------------- //
+#define AR_COL32_R_SHIFT    0
+#define AR_COL32_G_SHIFT    8
+#define AR_COL32_B_SHIFT    16
+#define AR_COL32_A_SHIFT    24
+#define AR_COL32_A_MASK     0xFF000000
+
+#define AR_COL32(R,G,B,A)    (((uint32_t)(A)<<AR_COL32_A_SHIFT) | ((uint32_t)(B)<<AR_COL32_B_SHIFT) | ((uint32_t)(G)<<AR_COL32_G_SHIFT) | ((uint32_t)(R)<<AR_COL32_R_SHIFT))
+#define AR_COL32_WHITE       AR_COL32(255,255,255,255)  // Opaque white = 0xFFFFFFFF
+#define AR_COL32_BLACK       AR_COL32(0,0,0,255)        // Opaque black
+#define AR_COL32_BLACK_TRANS AR_COL32(0,0,0,0)          // Transparent black = 0x00000000
+
+#define AR_PI 3.14159265358979323846f
+#define AR_ROUND(_VAL) ((float)(int)((_VAL) + 0.5f))
+#define AR_DEG2RAD(_VAL) ((_VAL) * (AR_PI / 180.0f))
+
+// ----------------------------------------------------------- //
+//  [ARGON] Basic polymer structs
+// ----------------------------------------------------------- //
+
 class ArIntVec2 final
 {
 public:
@@ -70,11 +86,50 @@ public:
 	ArVec4(const float& x, const float& y, const float& z, const float& w)
 		: x(x), y(y), z(z), w(w) {
 	}
+	ArVec4(const float& v)
+		: x(v), y(v), z(v), w(v) {
+	}
 };
 
-// ---------------------------------------------------------- //
-//  !.Argon math functions
-// ---------------------------------------------------------- //
+class ArColor final
+{
+public:
+	float r = 0;
+	float g = 0;
+	float b = 0;
+	float a = 0;
+
+	ArColor() {}
+	ArColor(float r, float g, float b, float a)
+		: r(r), g(g), b(b), a(a) {
+	}
+	ArColor(uint32_t color)
+		: r((float)((color >> AR_COL32_R_SHIFT) & 0xFF)), g((float)((color >> AR_COL32_G_SHIFT) & 0xFF)), b((float)((color >> AR_COL32_B_SHIFT) & 0xFF)), a((float)((color >> AR_COL32_A_SHIFT) & 0xFF)) {
+	}
+	ArColor(const ArVec4& color)
+		: r((float)(color.x * 255)), g((float)(color.y * 255)), b((float)(color.z * 255)), a((float)(color.w * 255)) {
+	}
+
+	operator uint32_t() const
+	{
+		return AR_COL32(r, g, b, a);
+	}
+
+	operator ArVec4() const
+	{
+		return ArVec4(r / 255.f, g / 255.f, b / 255.f, a / 255.f);
+	}
+
+	ArColor SetAlpha(float alpha) const
+	{
+		return ArColor(r, g, b, alpha);
+	}
+};
+
+// ----------------------------------------------------------- //
+//  [ARGON] Basic polymer structs operators
+// ----------------------------------------------------------- //
+
 inline ArIntVec2 operator+(const ArIntVec2& lhs, const ArIntVec2& rhs) { return ArIntVec2(lhs.x + rhs.x, lhs.y + rhs.y); }
 inline ArIntVec2 operator-(const ArIntVec2& lhs, const ArIntVec2& rhs) { return ArIntVec2(lhs.x - rhs.x, lhs.y - rhs.y); }
 inline ArIntVec2 operator*(const ArIntVec2& lhs, const ArIntVec2& rhs) { return ArIntVec2(lhs.x * rhs.x, lhs.y * rhs.y); }
@@ -148,9 +203,9 @@ inline ArVec4 operator*=(ArVec4& lhs, float rhs) { lhs.x *= rhs; lhs.y *= rhs; l
 inline ArVec4 operator/=(ArVec4& lhs, const ArVec4& rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; lhs.z /= rhs.z; lhs.w /= rhs.w; return lhs; }
 inline ArVec4 operator/=(ArVec4& lhs, float rhs) { lhs.x /= rhs; lhs.y /= rhs; lhs.z /= rhs; lhs.w /= rhs; return lhs; }
 
-#define AR_PI 3.14159265358979323846f
-#define AR_ROUND(_VAL) ((float)(int)((_VAL) + 0.5f))
-#define AR_DEG2RAD(_VAL) ((_VAL) * (AR_PI / 180.0f))
+// ----------------------------------------------------------- //
+//  [ARGON] Math functions
+// ----------------------------------------------------------- //
 
 template<typename T> inline T ArMin(T lhs, T rhs) { return lhs < rhs ? lhs : rhs; }
 template<typename T> inline T ArMax(T lhs, T rhs) { return lhs >= rhs ? lhs : rhs; }
@@ -190,16 +245,22 @@ inline float  ArRsqrt(float x) { return 1.0f / sqrtf(x); }
 #endif
 inline double ArRsqrt(double x) { return 1.0 / sqrt(x); }
 
+// ----------------------------------------------------------- //
+//  [ARGON] Math struct
+// ----------------------------------------------------------- //
+
 class ArRect
 {
 public:
 	ArVec2 min = ArVec2();
 	ArVec2 max = ArVec2();
+public:
 	ArRect() {}
 	ArRect(ArVec2 min, ArVec2 max) : min(min), max(max) {}
+	ArRect(ArIntVec2 min, ArIntVec2 max) : min((float)min.x, (float)min.y), max((float)max.x, (float)max.y) {}
 	ArRect(const ArRect& other) : min(other.min), max(other.max) {}
 	ArRect(float x1, float y1, float x2, float y2) : min(x1, y1), max(x2, y2) {}
-
+	ArRect(int x1, int y1, int x2, int y2) : min((float)x1, (float)y1), max((float)x2, (float)y2) {}
 
 	ArVec2      GetCenter() const { return ArVec2((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f); }
 	ArVec2      GetSize() const { return ArVec2(max.x - min.x, max.y - min.y); }
@@ -311,163 +372,6 @@ public:
 	const float* operator[](int i) const { return m[i]; }
 };
 
-template <typename T, size_t BlockSize = 2042, typename Allocator = std::allocator<T>>
-class ArChunkedVector {
-private:
-	Allocator allocator = {};
-	std::vector<T*> chunks = {};
-	T* currentChunk = nullptr;
-	size_t currentIndex = 0;
-	size_t elementSize = 0;
-	T* contiguousData = nullptr;
-
-	void allocate_block() {
-		T* newBlock = allocator.allocate(BlockSize);
-		chunks.push_back(newBlock);
-		currentChunk = newBlock;
-		currentIndex = 0;
-	}
-
-	void EnsureCapacityForOne() {
-		if (currentChunk == nullptr || currentIndex >= BlockSize)
-			allocate_block();
-	}
-
-public:
-	ArChunkedVector() : currentChunk(nullptr), currentIndex(0), elementSize(0), contiguousData(nullptr) {}
-
-	~ArChunkedVector() {
-		clear();
-		for (T* block : chunks)
-			allocator.deallocate(block, BlockSize);
-		chunks.clear();
-		free_data();
-	}
-
-	ArChunkedVector(const ArChunkedVector&) = delete;
-	ArChunkedVector& operator=(const ArChunkedVector&) = delete;
-
-	void push_back(const T& value) {
-		EnsureCapacityForOne();
-		new (currentChunk + currentIndex) T(value);
-		++currentIndex;
-		++elementSize;
-	}
-
-	void push_back(T&& value) {
-		EnsureCapacityForOne();
-		new (currentChunk + currentIndex) T(std::move(value));
-		++currentIndex;
-		++elementSize;
-	}
-
-	template<typename... Args>
-	void emplace_back(Args&&... args) {
-		EnsureCapacityForOne();
-		new (currentChunk + currentIndex) T(std::forward<Args>(args)...);
-		++currentIndex;
-		++elementSize;
-	}
-
-	T* data() {
-		if (contiguousData)
-			return contiguousData;
-		if (elementSize == 0)
-			return nullptr;
-		contiguousData = new T[elementSize];
-		size_t copied = 0;
-		for (size_t b = 0; b < chunks.size(); ++b) {
-			size_t count = (b == chunks.size() - 1) ? currentIndex : BlockSize;
-			std::copy(chunks[b], chunks[b] + count, contiguousData + copied);
-			copied += count;
-		}
-		return contiguousData;
-	}
-
-	void free_data() {
-		if (contiguousData) {
-			delete[] contiguousData;
-			contiguousData = nullptr;
-		}
-	}
-
-	T& operator[](size_t index) {
-		if (index >= elementSize)
-			throw std::out_of_range("Index out of range");
-		size_t blockIndex = index / BlockSize;
-		size_t offset = index % BlockSize;
-		return chunks[blockIndex][offset];
-	}
-
-	const T& operator[](size_t index) const {
-		if (index >= elementSize)
-			throw std::out_of_range("Index out of range");
-		size_t blockIndex = index / BlockSize;
-		size_t offset = index % BlockSize;
-		return chunks[blockIndex][offset];
-	}
-
-	void clear() {
-		for (size_t b = 0; b < chunks.size(); ++b) {
-			size_t count = (b == chunks.size() - 1) ? currentIndex : BlockSize;
-			for (size_t j = 0; j < count; ++j)
-				(chunks[b] + j)->~T();
-		}
-		elementSize = 0;
-		currentChunk = (chunks.empty() ? nullptr : chunks[0]);
-		currentIndex = 0;
-		free_data();
-	}
-
-	size_t size() const { return elementSize; }
-
-	size_t capacity() const { return chunks.size() * BlockSize; }
-
-	void reserve(size_t newCapacity) {
-		size_t currentCapacity = capacity();
-		while (currentCapacity < newCapacity) {
-			allocate_block();
-			currentCapacity += BlockSize;
-		}
-	}
-
-	void resize(size_t newSize) {
-		if (newSize < elementSize) {
-			size_t newFullBlocks = newSize / BlockSize;
-			size_t newLastCount = newSize % BlockSize;
-			if (!chunks.empty() && newSize > 0) {
-				if (newFullBlocks < chunks.size()) {
-					size_t destroyCount = (newFullBlocks == chunks.size() - 1) ? (currentIndex - newLastCount) : BlockSize;
-					T* block = chunks[newFullBlocks];
-					for (size_t j = newLastCount; j < ((newFullBlocks == chunks.size() - 1) ? currentIndex : BlockSize); ++j)
-						(block + j)->~T();
-				}
-			}
-			elementSize = newSize;
-			if (newSize == 0) {
-				currentChunk = nullptr;
-				currentIndex = 0;
-			}
-			else {
-				size_t fullBlocks = newSize / BlockSize;
-				size_t last = newSize % BlockSize;
-				if (last == 0) {
-					currentChunk = chunks[fullBlocks - 1];
-					currentIndex = BlockSize;
-				}
-				else {
-					currentChunk = chunks[fullBlocks];
-					currentIndex = last;
-				}
-			}
-		}
-		else if (newSize > elementSize) {
-			while (elementSize < newSize)
-				push_back(T());
-		}
-	}
-};
-
 static const constexpr uint32_t ArCrc32LookupTable[256] =
 {
 	0x00000000,0x77073096,0xEE0E612C,0x990951BA,0x076DC419,0x706AF48F,0xE963A535,0x9E6495A3,0x0EDB8832,0x79DCB8A4,0xE0D5E91E,0x97D2D988,0x09B64C2B,0x7EB17CBD,0xE7B82D07,0x90BF1D91,
@@ -487,45 +391,3 @@ static const constexpr uint32_t ArCrc32LookupTable[256] =
 	0xA00AE278,0xD70DD2EE,0x4E048354,0x3903B3C2,0xA7672661,0xD06016F7,0x4969474D,0x3E6E77DB,0xAED16A4A,0xD9D65ADC,0x40DF0B66,0x37D83BF0,0xA9BCAE53,0xDEBB9EC5,0x47B2CF7F,0x30B5FFE9,
 	0xBDBDF21C,0xCABAC28A,0x53B39330,0x24B4A3A6,0xBAD03605,0xCDD70693,0x54DE5729,0x23D967BF,0xB3667A2E,0xC4614AB8,0x5D681B02,0x2A6F2B94,0xB40BBE37,0xC30C8EA1,0x5A05DF1B,0x2D02EF8D,
 };
-
-template<typename T, typename = void>
-struct ArIsEnumFlag : std::false_type {};
-
-template<typename T>
-struct ArIsEnumFlag<T, std::enable_if_t<
-	std::is_enum<T>::value&&
-	std::is_same<typename std::underlying_type<T>::type, uint32_t>::value&&
-	std::is_convertible<decltype(T::None), T>::value
-	>> : std::true_type {};
-
-// 使用 enable_if 替代 requires
-template<typename Enum>
-typename std::enable_if<ArIsEnumFlag<Enum>::value, Enum>::type
-operator|(Enum lhs, Enum rhs)
-{
-	using Underlying = typename std::underlying_type<Enum>::type;
-	return static_cast<Enum>(static_cast<Underlying>(lhs) | static_cast<Underlying>(rhs));
-}
-
-template<typename Enum>
-typename std::enable_if<ArIsEnumFlag<Enum>::value, Enum>::type
-operator&(Enum lhs, Enum rhs)
-{
-	using Underlying = typename std::underlying_type<Enum>::type;
-	return static_cast<Enum>(static_cast<Underlying>(lhs) & static_cast<Underlying>(rhs));
-}
-
-template<typename Enum>
-typename std::enable_if<ArIsEnumFlag<Enum>::value, bool>::type
-ArHasFlag(Enum value, Enum flag)
-{
-	using Underlying = typename std::underlying_type<Enum>::type;
-	return (static_cast<Underlying>(value) & static_cast<Underlying>(flag)) != 0;
-}
-
-template<typename Enum, typename... EnumFlags>
-typename std::enable_if<ArIsEnumFlag<Enum>::value && (ArIsEnumFlag<EnumFlags>::value && ...), bool>::type
-ArHasAnyFlag(Enum value, EnumFlags... flags)
-{
-	return (ArHasFlag(value, flags) || ...);
-}

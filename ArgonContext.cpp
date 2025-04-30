@@ -1,17 +1,19 @@
-﻿#include "ArgonCore.h"
+﻿#include "ArgonGui.h"
+
+ArgonContext* argonContextInstance = nullptr;
 
 void ArgonContextStatus::Awake()
 {
 	startTime = ArHelp::GetTimePoint();
-	currentTime = startTime;
+	currentFrameStartedTime = startTime;
 	started = true;
 }
 
 void ArgonContextStatus::StartFrame()
 {
-	lastFrameUpdatedTime = currentTime;
-	currentTime = ArHelp::GetTimePoint();
-	deltaTime = currentTime - lastFrameUpdatedTime;
+	lastFrameUpdatedTime = currentFrameStartedTime;
+	currentFrameStartedTime = ArHelp::GetTimePoint();
+	deltaTime = currentFrameStartedTime - lastFrameUpdatedTime;
 	running = true;
 }
 
@@ -23,41 +25,42 @@ void ArgonContextStatus::OnDestroy()
 
 ArgonContext& ArgonContext::GetInstance()
 {
-	static ArgonContext* instance = new ArgonContext();
-	return *instance;
+	if (!argonContextInstance)
+		argonContextInstance = new ArgonContext();
+	return *argonContextInstance;
 }
 
-bool ArgonContext::SetPlatform(IArgonPlatform* platform, const IArPlatformConfig& platformConfig)
+bool ArgonContext::SetPlatform(IArgonPlatform* platform, const IArPlatformConfig& config)
 {
 	if (!platform)
 		return false;
-	if (!platform->Awake(std::forward<const IArPlatformConfig&>(platformConfig)))
+	if (!platform->Awake(config))
 		return false;
 	this->platform = platform;
 	return true;
 }
 
-bool ArgonContext::SetRenderer(IArgonRenderer* renderer, const IArRendererConfig& rendererConfig)
+bool ArgonContext::SetRenderer(IArgonRenderer* renderer, const IArRendererConfig& config)
 {
 	if (!renderer)
 		return false;
-	if (!renderer->Awake(std::forward<const IArRendererConfig&>(rendererConfig)))
+	if (!renderer->Awake(config))
 		return false;
 	this->renderer = renderer;
 	return true;
 }
 
-bool ArgonContext::SetGlyphParser(IArgonGlyphParser* glyphParser)
+bool ArgonContext::SetGlyphParser(IArgonGlyphParser* glyphParser, const IArGlyphParserConfig& config)
 {
 	if (!glyphParser)
 		return false;
-	if (!glyphParser->Awake())
+	if (!glyphParser->Awake(config))
 		return false;
-	renderManager.textureManager.glyphParser = glyphParser;
+	this->glyphParser = glyphParser;
 	return true;
 }
 
-bool ArgonContext::Initialize()
+bool ArgonContext::Awaken()
 {
 	if (!IsAllInterfacesReady())
 		return false;
@@ -88,9 +91,7 @@ void ArgonContext::Shutdown()
 bool ArgonContext::StartFrame()
 {
 	if (!IsAllInterfacesReady() ||
-		!platform->IsRunning() || !renderer->IsRunning() ||
-		contextStatus.paused
-		)
+		!platform->IsRunning() || !renderer->IsRunning())
 	{
 		contextStatus.running = false;
 		return false;
@@ -104,7 +105,7 @@ bool ArgonContext::StartFrame()
 
 	renderer->StartFrame(renderManager);
 
-	renderManager.StartFrame();
+	renderManager.StartFrame(glyphParser);
 
 	graphicManager.StartFrame(*this);
 
