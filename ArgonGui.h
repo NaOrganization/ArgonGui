@@ -1,4 +1,24 @@
 ﻿#pragma once
+// ArgonGui - A lightweight GUI library for C++
+// 
+//       ___           ___           ___           ___           ___           ___           ___                 
+//      /\  \         /\  \         /\  \         /\  \         /\__\         /\  \         /\__\          ___   
+//     /::\  \       /::\  \       /::\  \       /::\  \       /::|  |       /::\  \       /:/  /         /\  \  
+//    /:/\:\  \     /:/\:\  \     /:/\:\  \     /:/\:\  \     /:|:|  |      /:/\:\  \     /:/  /          \:\  \ 
+//   /::\~\:\  \   /::\~\:\  \   /:/  \:\  \   /:/  \:\  \   /:/|:|  |__   /:/  \:\  \   /:/  /  ___      /::\__\
+//  /:/\:\ \:\__\ /:/\:\ \:\__\ /:/__/_\:\__\ /:/__/ \:\__\ /:/ |:| /\__\ /:/__/_\:\__\ /:/__/  /\__\  __/:/\/__/
+//  \/__\:\/:/  / \/_|::\/:/  / \:\  /\ \/__/ \:\  \ /:/  / \/__|:|/:/  / \:\  /\ \/__/ \:\  \ /:/  / /\/:/  /   
+//       \::/  /     |:|::/  /   \:\ \:\__\    \:\  /:/  /      |:/:/  /   \:\ \:\__\    \:\  /:/  /  \::/__/    
+//       /:/  /      |:|\/__/     \:\/:/  /     \:\/:/  /       |::/  /     \:\/:/  /     \:\/:/  /    \:\__\    
+//      /:/  /       |:|  |        \::/  /       \::/  /        /:/  /       \::/  /       \::/  /      \/__/    
+//      \/__/         \|__|         \/__/         \/__/         \/__/         \/__/         \/__/                
+//
+// Copyright (c) 2025 ArgonCore
+// Version: Beta 1.1.0
+// Repository: https://github.com/NaOrganization/ArgonGui
+
+#define ARGONGUI_VERSION "Beta 1.1.0"
+
 #include <unordered_map>
 #include <map>
 #include <queue>
@@ -13,7 +33,8 @@
 using namespace std::chrono_literals;
 
 // ---------------------------------------------------------- //
-//  !. Forward declarations: ArgonCore
+//  [ARGON] Basic aliases
+//		- Standard types and aliases in ArgonGui
 // ---------------------------------------------------------- //
 
 // [ALIAS] [ArgonCore] - Standard time duration
@@ -30,7 +51,7 @@ using ArString = std::basic_string<ArChar>;
 using ArStringView = std::basic_string_view<ArChar>;
 
 // ---------------------------------------------------------- //
-//  !. Forward declarations: ArgonInput
+//  [ARGON] [ArgonInput] Forward declarations
 // ---------------------------------------------------------- //
 
 enum class ArKeyCode;
@@ -40,6 +61,9 @@ enum class ArMouseInputSource;
 enum class ArGamepadButton;
 enum class ArInputDevice;
 enum class ArInputAction;
+
+class IArPlatformConfig;
+class IArgonPlatform;
 
 class ArMouseEventData;
 class ArMouseMoveEventData;
@@ -61,9 +85,6 @@ class ArKeyboardState;
 class ArGamepadState;
 class ArgonInputManager;
 
-class IArPlatformConfig;
-class IArgonPlatform;
-
 // [VARIANT] [ArgonInputSystem] - Union structure for data of the event
 using ArInputEventData = std::variant<
 	ArMouseMoveEventData,
@@ -78,22 +99,23 @@ using ArInputEventData = std::variant<
 	ArDisplayEventData>;
 
 // ---------------------------------------------------------- //
-//  !. Forward declarations: ArgonRender
+//  [ARGON] [ArgonRender] Forward declarations
 // ---------------------------------------------------------- //
-
-class ArVertex;
-class ArRenderBatch;
-class ArRenderListSharedData;
-class ArRenderList;
-class ArTextureAtlas;
-class ArFontFace;
-class ArTextureManager;
-class ArgonRenderManager;
 
 class IArgonGlyphParser;
 class IArRendererConfig;
 class IArRenderCustomCreateConfig;
 class IArgonRenderer;
+
+class ArVertex;
+class ArRenderBatch;
+class ArRenderListSharedData;
+class ArRenderList;
+class ArTextureLand;
+class ArGlyphKey;
+class ArGlyphInfo;
+class ArFont;
+class ArgonRenderManager;
 
 // [ALIAS] [ArgonRenderSystem] - Standard texture type
 using ArTextureID = void*;
@@ -101,8 +123,10 @@ using ArTextureID = void*;
 using ArShaderID = void*;
 
 // ----------------------------------------------------------- //
-//  !. Forward declarations: ArgonGraphic
+//  [ARGON] [ArgonGraphic] Forward declarations
 // ----------------------------------------------------------- //
+
+class IArGraphicComponent;
 
 class ArGraphicRenderList;
 class ArGraphicBoundingBox;
@@ -111,19 +135,18 @@ class ArGraphicLayer;
 class ArGraphicPrimRenderListElement;
 class ArgonGraphicManager;
 
-class IArGraphicComponent;
-
 // ---------------------------------------------------------- //
-//  !. Forward declarations: ArgonContext
+//  [ARGON] [ArgonContext] Forward declarations
 // ---------------------------------------------------------- //
 
 class ArgonContextStatus;
 class ArgonContext;
 
 // ----------------------------------------------------------- //
-//  !. Main modules includes
+//  [ARGON] Modules
 // ----------------------------------------------------------- //
 
+#include "ArgonTemplate.h"
 #include "ArgonMath.h"
 #include "ArgonInput.h"
 #include "ArgonRender.h"
@@ -131,7 +154,7 @@ class ArgonContext;
 #include "ArgonContext.h"
 
 // ----------------------------------------------------------- //
-//  !. Main modules namespace
+//  [ARGON] Main api namespace
 // ----------------------------------------------------------- //
 
 namespace ArGui
@@ -144,15 +167,17 @@ namespace ArGui
 
 	inline ArgonContext& GetContext() noexcept { return ArgonContext::GetInstance(); }
 
-	inline bool Initialize() { return ArgonContext::GetInstance().Initialize(); }
+	inline bool Initialize() { return ArgonContext::GetInstance().Awaken(); }
 
 	inline void Shutdown() { ArgonContext::GetInstance().Shutdown(); }
 
-	inline bool SetPlatform(IArgonPlatform* platform, const IArPlatformConfig& platformConfig) { return ArgonContext::GetInstance().SetPlatform(platform, platformConfig); }
+	inline bool IsRunning() { return ArgonContext::GetInstance().contextStatus.running; }
 
-	inline bool SetRenderer(IArgonRenderer* renderer, const IArRendererConfig& rendererConfig) { return ArgonContext::GetInstance().SetRenderer(renderer, rendererConfig); }
+	inline bool SetPlatform(IArgonPlatform* platform, const IArPlatformConfig& config) { return ArgonContext::GetInstance().SetPlatform(platform, config); }
 
-	inline bool SetGlyphParser(IArgonGlyphParser* glyphParser) { return ArgonContext::GetInstance().SetGlyphParser(glyphParser); }
+	inline bool SetRenderer(IArgonRenderer* renderer, const IArRendererConfig& config) { return ArgonContext::GetInstance().SetRenderer(renderer, config); }
+
+	inline bool SetGlyphParser(IArgonGlyphParser* glyphParser, const IArGlyphParserConfig& config) { return ArgonContext::GetInstance().SetGlyphParser(glyphParser, config); }
 
 	inline bool StartFrame() { return ArgonContext::GetInstance().StartFrame(); }
 

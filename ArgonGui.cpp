@@ -1,5 +1,4 @@
-﻿#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
-#include "ArgonCore.h"
+﻿#include "ArgonGui.h"
 #include <locale>
 #include <codecvt>
 #include <random>
