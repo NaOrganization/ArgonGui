@@ -60,4 +60,4 @@ git submodule add https://github.com/NaOrganization/ArgonGui
 
 ArgonGui is licensed under the Apache License 2.0.
 
-**© 2025 by** [**NaOrganization**](https://github.com/NaOrganization) **& All ArgonGui Contributors**
+**© 2025 by [NaOrganization](https://github.com/NaOrganization) & All ArgonGui Contributors**
