@@ -1,5 +1,5 @@
 ﻿#pragma once
-// ArgonGui - A lightweight GUI library for C++
+// ArgonGui - A lightweight, cross-platform, untrammeled GUI framework that doesn't ask for much—just your heart.
 // 
 //       ___           ___           ___           ___           ___           ___           ___                 
 //      /\  \         /\  \         /\  \         /\  \         /\__\         /\  \         /\__\          ___   
@@ -13,11 +13,12 @@
 //      /:/  /       |:|  |        \::/  /       \::/  /        /:/  /       \::/  /       \::/  /      \/__/    
 //      \/__/         \|__|         \/__/         \/__/         \/__/         \/__/         \/__/                
 //
-// Copyright (c) 2025 ArgonCore
-// Version: Beta 1.1.0
+// © 2025 by [NaOrganization](https://github.com/NaOrganization) & All ArgonGui Contributors
+// Version: v1.1.1
 // Repository: https://github.com/NaOrganization/ArgonGui
+// License: Apache License 2.0
 
-#define ARGONGUI_VERSION "Beta 1.1.0"
+#define ARGONGUI_VERSION "v1.1.1"
 
 #include <unordered_map>
 #include <map>
@@ -76,6 +77,7 @@ class ArGamepadLeftStickEventData;
 class ArGamepadRightStickEventData;
 class ArGamepadLeftTriggerEventData;
 class ArGamepadRightTriggerEventData;
+class ArGamepadConnectionEventData;
 class ArDisplayEventData;
 class ArInputEvent;
 class ArButtonState;
@@ -96,6 +98,7 @@ using ArInputEventData = std::variant<
 	ArGamepadRightStickEventData,
 	ArGamepadLeftTriggerEventData,
 	ArGamepadRightTriggerEventData,
+	ArGamepadConnectionEventData,
 	ArDisplayEventData>;
 
 // ---------------------------------------------------------- //
@@ -126,10 +129,18 @@ using ArShaderID = void*;
 //  [ARGON] [ArgonGraphic] Forward declarations
 // ----------------------------------------------------------- //
 
-class IArGraphicComponent;
+enum class ArLayerAdditionPriority;
+enum class ArTimerCompMode;
+enum class ArFlexLayoutDirection;
+enum class ArFlexLayoutJustifyContent;
+enum class ArFlexLayoutAlignItems;
+enum class ArFlexLayoutWrap;
+enum class ArFlexLayoutAlignContent;
+
+class IArGraphicElementComponent;
 
 class ArGraphicRenderList;
-class ArGraphicBoundingBox;
+class ArGraphicBoxModel;
 class ArGraphicElement;
 class ArGraphicLayer;
 class ArGraphicPrimRenderListElement;
@@ -159,11 +170,14 @@ class ArgonContext;
 
 namespace ArGui
 {
-	inline ArgonGraphicManager& GetGraphicManager() noexcept { return ArgonContext::GetInstance().graphicManager; }
+	inline ArgonInputManager& GetInputManager() noexcept { return ArgonContext::GetInstance().inputManager; }
 
 	inline ArgonRenderManager& GetRenderManager() noexcept { return ArgonContext::GetInstance().renderManager; }
 
-	inline ArgonInputManager& GetInputManager() noexcept { return ArgonContext::GetInstance().inputManager; }
+	inline ArgonGraphicManager& GetGraphicManager() noexcept { return ArgonContext::GetInstance().graphicManager; }
+
+	inline ArgonGraphicThemeManager& GetThemeManager() noexcept { return ArgonContext::GetInstance().themeManager; }
+
 
 	inline ArgonContext& GetContext() noexcept { return ArgonContext::GetInstance(); }
 

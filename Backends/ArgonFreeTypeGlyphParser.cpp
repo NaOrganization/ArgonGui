@@ -51,21 +51,7 @@ void ArFreeTypeFontInfo::SetPixelHeight(uint32_t pixelHeight)
 	maxAdvanceWidth = (float)FT_CEIL(metrics.max_advance);
 }
 
-bool ArgonFreeTypeGlyphParser::Awake(const IArGlyphParserConfig& config)
-{
-	ftMemory = new FT_MemoryRec_;
-	ftMemory->user = nullptr;
-	ftMemory->alloc = &FT_ALLOC;
-	ftMemory->free = &FT_FREE;
-	ftMemory->realloc = &FT_REALLOC;
-	FT_Error error = FT_New_Library(ftMemory, &ftLibrary);
-	if (error != 0)
-		return false;
-	FT_Add_Default_Modules(ftLibrary);
-	return true;
-}
-
-void ArgonFreeTypeGlyphParser::OnDestroy()
+ArgonFreeTypeGlyphParser::~ArgonFreeTypeGlyphParser()
 {
 	for (auto& fontInfo : fonts)
 	{
@@ -85,6 +71,20 @@ void ArgonFreeTypeGlyphParser::OnDestroy()
 		delete ftMemory;
 		ftMemory = nullptr;
 	}
+}
+
+bool ArgonFreeTypeGlyphParser::Awake(const IArGlyphParserConfig& config)
+{
+	ftMemory = new FT_MemoryRec_;
+	ftMemory->user = nullptr;
+	ftMemory->alloc = &FT_ALLOC;
+	ftMemory->free = &FT_FREE;
+	ftMemory->realloc = &FT_REALLOC;
+	FT_Error error = FT_New_Library(ftMemory, &ftLibrary);
+	if (error != 0)
+		return false;
+	FT_Add_Default_Modules(ftLibrary);
+	return true;
 }
 
 bool ArgonFreeTypeGlyphParser::HasGlyph(ArGuiID fontId, uint32_t codepoint) const
@@ -151,7 +151,7 @@ std::optional<IArgonGlyphParser::GlyphParseResult> ArgonFreeTypeGlyphParser::Par
 
 	IArgonGlyphParser::GlyphParseResult glyphParseResult = {};
 	ArGlyphInfo& glyphInfo = *new ArGlyphInfo;
-	glyphInfo.min = ArVec2((float)offsetX, fontInfo.ascender - (float)offsetY);
+	glyphInfo.min = ArVec2((float)offsetX, ((float)(int)((fontInfo.ascender) + 0.5f)) - (float)offsetY);
 	glyphInfo.size = ArVec2((float)width, (float)height);
 
 	glyphInfo.visible = glyphInfo.size.x > 0 && glyphInfo.size.y > 0;

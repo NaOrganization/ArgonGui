@@ -12,7 +12,7 @@
 
 #include <fmt/core.h>
 
-#include "Demo.h"
+#include "../Demo.h"
 
 #pragma comment(lib, "d3d11.lib")
 

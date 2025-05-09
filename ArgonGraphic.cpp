@@ -1,15 +1,24 @@
 ﻿#include "ArgonGui.h"
 #include <stack>
+#include "ArgonGraphic.h"
 
 ArGraphicElement::~ArGraphicElement()
 {
-	for (auto& [_, component] : componentMap) 
-	{ 
-		for (auto& c : component) delete c; 
-	} 
-	componentMap.clear(); 
-	for (auto& child : children) 
-		delete child; 
+	for (auto& [_, component] : componentMap)
+	{
+		for (auto& c : component) delete c;
+	}
+	componentMap.clear();
+
+	while (!unwakedChildren.empty())
+	{
+		ArGraphicElement* child = unwakedChildren.front();
+		unwakedChildren.pop_front();
+		delete child;
+	}
+
+	for (auto& child : children)
+		delete child;
 	children.clear();
 }
 
@@ -19,10 +28,17 @@ void ArGraphicElement::Awaken(ArgonContext& context)
 
 	Awake(context);
 
+	while (!unwakedChildren.empty())
+	{
+		ArGraphicElement* child = unwakedChildren.front();
+		unwakedChildren.pop_front();
+		children.push_back(child);
+	}
+
 	for (auto& child : children)
 	{
 		child->layer = layer;
-		child->boundingBox.position = *boundingBox.position + *boundingBox.localPosition;
+		child->borderBox.position = borderBox.position + borderBox.localPosition;
 		child->Awaken(context);
 	}
 	for (auto& [typeIndex, components] : componentMap)
@@ -34,58 +50,95 @@ void ArGraphicElement::Awaken(ArgonContext& context)
 	}
 }
 
-void ArGraphicElement::StartFrame(ArgonContext& context)
+void ArGraphicElement::FrameUpdate(ArgonContext& context)
 {
-	if (visible)
-		renderList = context.renderManager.AllocationRenderList<ArGraphicRenderList>(this);
+	if (!ArHasFlag(flags, ArGraphicElementFlag::Enable))
+		return;
 
-	OnUpdate(context);
-	if (focusing && context.graphicManager.focusingElement != this)
+	if (ArHasFlag(flags, ArGraphicElementFlag::Visible))
 	{
-		OnFocusLost(context);
-		focusing = false;
+		renderList = context.renderManager.AllocationRenderList<ArGraphicRenderList>(this);
+		ArGraphicElement* parent = this->owner;
+		if (!borderBox.overflow && ArLackFlag(flags, ArGraphicElementFlag::Debug))
+		{
+			ArRect finalRect = borderBox.GetBorderRect();
+			while (parent)
+			{
+				finalRect = finalRect.Intersection(parent->borderBox.GetContentRect());
+				parent = parent->owner;
+			}
+			renderList->PushScissor(finalRect);
+		}
+		else
+		{
+			renderList->PushScissor(ArRect({}, context.inputManager.GetDisplayState().size));
+		}
+
+		OnRender(context);
+
+		for (auto& [_, components] : componentMap)
+		{
+			for (auto& component : components)
+			{
+				component->OnRender(*this);
+			}
+		}
+
+		if (ArHasFlag(flags, ArGraphicElementFlag::Debug))
+		{
+			renderList->AddRect(borderBox.GetMarginRect(), AR_COL32(255.f, 0.f, 0.f, 255.f));
+			renderList->AddRect(borderBox.GetPaddingRect(), AR_COL32(0.f, 255.f, 0.f, 255.f));
+			renderList->AddRect(borderBox.GetContentRect(), AR_COL32(0.f, 0.f, 255.f, 255.f));
+		}
+	}
+
+	while (!unwakedChildren.empty())
+	{
+		ArGraphicElement* child = unwakedChildren.front();
+		unwakedChildren.pop_front();
+		children.push_back(child);
+		child->layer = layer;
+		child->borderBox.position = borderBox.position + borderBox.localPosition;
+		child->Awaken(context);
 	}
 
 	for (auto& child : children)
 	{
-		child->boundingBox.position = *boundingBox.position + *boundingBox.localPosition;
-		child->StartFrame(context);
+		child->borderBox.position = borderBox.position + borderBox.localPosition;
+		child->FrameUpdate(context);
 	}
+
+	if (ArHasFlag(beingState, ArGraphicElementBeingState::Focus))
+	{
+		OnFocus(context);
+	}
+	else if (ArHasFlag(beingState, ArGraphicElementBeingState::Unfocus))
+	{
+		OnFocusLost(context);
+	}
+
+	if (ArHasFlag(beingState, ArGraphicElementBeingState::Hover))
+	{
+		OnHover(context);
+	}
+	else if (ArHasFlag(beingState, ArGraphicElementBeingState::Unhover))
+	{
+		OnUnhover(context);
+	}
+
+	OnUpdate(context);
+
 	for (auto& [_, components] : componentMap)
 	{
 		for (auto& component : components)
 		{
 			component->OnUpdate(*this, context);
+			if (ArHasAnyFlags(beingState, ArGraphicElementBeingState::ChildAdded, ArGraphicElementBeingState::ChildRemoved))
+				component->OnChildrenListChanged(*this, context);
 		}
 	}
-}
 
-void ArGraphicElement::EndFrame(ArgonContext& context)
-{
-	if (!visible)
-		return;
-
-	ArGraphicElement* parent = this->owner;
-	ArRect finalRect = boundingBox.GetRect();
-	while (parent)
-	{
-		finalRect = finalRect.Intersection(parent->boundingBox.GetRect());
-		parent = parent->owner;
-	}
-	renderList->PushScissor(finalRect);
-	OnRender(context);
-
-	for (auto& child : children)
-	{
-		child->EndFrame(context);
-	}
-	for (auto& [_, components] : componentMap)
-	{
-		for (auto& component : components)
-		{
-			component->OnRender(*this);
-		}
-	}
+	ArIfRemoveFlags(beingState, ArGraphicElementBeingState::All);
 }
 
 ArGraphicElement* ArGraphicElement::GetRootElement()
@@ -112,38 +165,11 @@ int ArGraphicElement::FindMostDeepestChild() const
 	return maxDepth;
 }
 
-void ArGraphicElement::AddComponent(std::type_index typeIndex, IArGraphicComponent* component)
-{
-	componentMap[typeIndex].push_back(component);
-}
-
-IArGraphicComponent* ArGraphicElement::GetComponent(std::type_index typeIndex, size_t index)
-{
-	auto it = componentMap.find(typeIndex);
-	if (it != componentMap.end())
-	{
-		if (index < 0 || index >= it->second.size())
-			return nullptr;
-		return it->second[index];
-	}
-	return nullptr;
-}
-
-bool ArGraphicElement::HasComponent(std::type_index typeIndex)
-{
-	auto it = componentMap.find(typeIndex);
-	if (it != componentMap.end())
-	{
-		return true;
-	}
-	return false;
-}
-
 void ArGraphicElement::AddChild(ArGraphicElement* child)
 {
 	child->owner = this;
 	child->depth = depth + 1;
-	children.push_back(child);
+	unwakedChildren.push_back(child);
 }
 
 ArGraphicElement* ArGraphicElement::GetChild(size_t index) const
@@ -154,7 +180,27 @@ ArGraphicElement* ArGraphicElement::GetChild(size_t index) const
 	return *it;
 }
 
-void ArGFloatAnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+std::vector<ArGraphicElement*> ArGraphicElement::GetAvailableChildren() const
+{
+	std::vector<ArGraphicElement*> availableChildren;
+	availableChildren.reserve(children.size());
+	for (auto& child : children)
+	{
+		if (ArLackFlag(child->flags, ArGraphicElementFlag::Enable)
+			|| ArHasFlag(child->flags, ArGraphicElementFlag::Dead))
+			continue;
+		availableChildren.push_back(child);
+	}
+	return availableChildren;
+}
+
+void ArGraphicElement::Kill()
+{
+	flags |= ArGraphicElementFlag::Dead;
+	layer->anyElementDead = true;
+}
+
+void ArFloatAnimatorComp::OnUpdate(ArGraphicElement& owner, ArgonContext& context)
 {
 	if (!processing)
 		return;
@@ -169,7 +215,7 @@ void ArGFloatAnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext&
 	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
 }
 
-void ArGFloatAnimatorComp::StartNewProcess(float start, float end, ArDuration length)
+void ArFloatAnimatorComp::NewProcess(float start, float end, ArDuration length)
 {
 	processing = true;
 	spentTime = 0ms;
@@ -178,7 +224,7 @@ void ArGFloatAnimatorComp::StartNewProcess(float start, float end, ArDuration le
 	this->length = length;
 }
 
-void ArGVec2AnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+void ArVec2AnimatorComp::OnUpdate(ArGraphicElement& owner, ArgonContext& context)
 {
 	if (!processing)
 		return;
@@ -193,7 +239,7 @@ void ArGVec2AnimatorComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& 
 	value = startPoint + (endPoint - startPoint) * animationFunction(std::chrono::duration<float>(spentTime).count() / std::chrono::duration<float>(length).count());
 }
 
-void ArGVec2AnimatorComp::StartNewProcess(ArVec2 start, ArVec2 end, ArDuration length)
+void ArVec2AnimatorComp::NewProcess(ArVec2 start, ArVec2 end, ArDuration length)
 {
 	processing = true;
 	spentTime = 0ms;
@@ -202,7 +248,7 @@ void ArGVec2AnimatorComp::StartNewProcess(ArVec2 start, ArVec2 end, ArDuration l
 	this->length = length;
 }
 
-bool ArGPolygonCollisionComp::IsInBounds(ArVec2 pos)
+bool ArPolygonCollisionComp::IsInBounds(ArVec2 pos)
 {
 	if (!working)
 		return false;
@@ -221,91 +267,279 @@ bool ArGPolygonCollisionComp::IsInBounds(ArVec2 pos)
 	return inside;
 }
 
-void ArGPolygonCollisionComp::OnUpdate(ArGraphicElement& owner, const ArgonContext& context)
+void ArPolygonCollisionComp::OnUpdate(ArGraphicElement& owner, ArgonContext& context)
 {
 	if (!working)
 		return;
 	const ArgonInputManager& inputManager = context.inputManager;
-	ArVec2 currentMousePos = inputManager.GetMousePosition() - owner.boundingBox.GetActualPosition();
+	ArVec2 currentMousePos = inputManager.GetMousePosition() - owner.borderBox.GetContentPosition();
 	hovering = IsInBounds(currentMousePos);
 }
 
-void ArGraphicPrimRenderListElement::Awake(const ArgonContext& context)
+void ArDroppableComp::OnUpdate(ArGraphicElement& owner, ArgonContext& context)
 {
-	interactive = false;
-	boundingBox.size = context.inputManager.GetDisplayState().size;
+	if (!owner.focusing || !owner.hovering)
+		return;
+	const ArgonInputManager& inputManager = context.inputManager;
+	ArVec2 currentMousePos = inputManager.GetMousePosition();
+	if (inputManager.IsMouseButtonDown(ArMouseButton::Left))
+	{
+		isDragging = true;
+		dragOffset = currentMousePos - droppableElement->borderBox.GetContentPosition();
+		owner.layer->LockFocus();
+	}
+	if (!isDragging)
+	{
+		if (animator)
+			animator->value = droppableElement->borderBox.GetContentPosition();
+		return;
+	}
+	if (!inputManager.IsMouseButtonHeld(ArMouseButton::Left))
+	{
+		isDragging = false;
+		dragOffset = ArVec2(0.f, 0.f);
+		owner.layer->UnlockFocus();
+		return;
+	}
+	if (animator)
+	{
+		*animator = currentMousePos - dragOffset;
+		droppableElement->borderBox.position = animator->value;
+	}
+	else
+	{
+		droppableElement->borderBox.position = currentMousePos - dragOffset;
+	}
 }
 
-void ArGraphicPrimRenderListElement::OnUpdate(const ArgonContext& context)
+void ArFlexLayoutComp::Lay(ArGraphicElement& owner)
 {
-	boundingBox.size = context.inputManager.GetDisplayState().size;
-}
-
-void ArGraphicFocusSelectorElement::Awake(const ArgonContext& context)
-{
-	focusable = interactive = false;
-
-	alphaAnimation = new ArGFloatAnimatorComp(0.f, [](float t) { return t; });
-	positionAnimation = new ArGVec2AnimatorComp(ArVec2(0.f, 0.f), [](float t) { return ArVec2(t, t); });
-	sizeAnimation = new ArGVec2AnimatorComp(ArVec2(0.f, 0.f), [](float t) { return ArVec2(t, t); });
-
-	AddComponent(typeid(ArGFloatAnimatorComp), alphaAnimation);
-	AddComponent(typeid(ArGVec2AnimatorComp), positionAnimation);
-	AddComponent(typeid(ArGVec2AnimatorComp), sizeAnimation);
-
-	boundingBox.size = context.inputManager.GetDisplayState().size;
-}
-
-void ArGraphicFocusSelectorElement::OnUpdate(const ArgonContext& context)
-{
-	visible = context.inputManager.GetLastInputDevice() == ArInputDevice::Gamepad;
-
-	if (!visible)
+	if (owner.GetAvailableChildren().size() <= 0)
 		return;
 
-	if (selected && context.graphicManager.focusingElement == nullptr)
-	{
-		alphaAnimation->StartNewProcess(255.f, 0.f, 500ms);
-	}
-	else if (!selected && context.graphicManager.focusingElement != nullptr)
-	{
-		alphaAnimation->StartNewProcess(0.f, 255.f, 500ms);
-		boundingBox.position = context.graphicManager.focusingElement->boundingBox.GetActualPosition() - ArVec2(5.f, 5.f);
-		boundingBox.size = *context.graphicManager.focusingElement->boundingBox.size + ArVec2(10.f, 10.f);
-	}
+	const ArVec2 availableSize = owner.borderBox.GetContentSize();
+	const float containerMainSize = GetMainSize(availableSize);
 
-	selected = context.graphicManager.focusingElement != nullptr;
-
-	if (!selected)
+	std::vector<ArGraphicElement*> children = owner.GetAvailableChildren();
+	if (children.empty())
 		return;
 
-	if (lastFocusBoundingBox != context.graphicManager.focusingElement->boundingBox)
+	for (ArGraphicElement* child : children)
 	{
-		ArVec2 size = *context.graphicManager.focusingElement->boundingBox.size + ArVec2(10.f, 10.f);
-		ArVec2 position = context.graphicManager.focusingElement->boundingBox.GetActualPosition() - ArVec2(5.f, 5.f);
-
-		if (lastFocusElement != context.graphicManager.focusingElement)
+		if (!child->HasComponent<ArFlexItemComp>())
+			child->AddComponent(new ArFlexItemComp());
+		auto* flexItem = child->GetComponent<ArFlexItemComp>();
+		if (flexItem->flexBasis < 0.f)
 		{
-			positionAnimation->StartNewProcess(*boundingBox.position, position, 200ms);
+			flexItem->flexBasis = GetMainSize(child->borderBox.GetContentSize());
 		}
-		else
-		{
-			positionAnimation->value = position;
-		}
-
-		sizeAnimation->StartNewProcess(*boundingBox.size, size, 300ms);
 	}
 
-	lastFocusElement = context.graphicManager.focusingElement;
-	lastFocusBoundingBox = context.graphicManager.focusingElement->boundingBox;
+	std::vector<FlexLine> lines;
+	FlexLine currentLine;
 
-	boundingBox.position = positionAnimation->value;
-	boundingBox.size = sizeAnimation->value;
+	float lineMainSize = 0.f;
+	float lineCrossSize = 0.f;
+
+	for (auto* child : children)
+	{
+		auto* flexItem = child->GetComponent<ArFlexItemComp>();
+		if (!flexItem)
+			continue;
+		ArVec2 childSize = child->borderBox.GetContentSize();
+		auto& margin = child->borderBox.margin;
+
+		float childMainSize = GetMainSize(childSize) + GetMainMargin(margin);
+		float childCrossSize = GetCrossSize(childSize) + GetCrossMargin(margin);
+
+		// Handle wrapping
+		if (wrap != ArFlexLayoutWrap::NoWrap && !currentLine.items.empty()
+			&& lineMainSize + childMainSize > containerMainSize)
+		{
+			currentLine.mainAxisSize = lineMainSize;
+			currentLine.crossAxisSize = lineCrossSize;
+			lines.push_back(std::move(currentLine));
+			currentLine = FlexLine();
+
+			lineMainSize = 0.f;
+			lineCrossSize = 0.f;
+		}
+
+		currentLine.items.push_back(child);
+		lineMainSize += flexItem->flexBasis;
+		lineCrossSize = std::max(lineCrossSize, childCrossSize);
+	}
+
+	// Push the last line
+	if (!currentLine.items.empty())
+	{
+		currentLine.mainAxisSize = lineMainSize;
+		currentLine.crossAxisSize = lineCrossSize;
+		lines.push_back(std::move(currentLine));
+	}
+
+	// Cross-axis offset for alignContent
+	float totalCrossSize = 0.f;
+	for (const auto& line : lines) totalCrossSize += line.crossAxisSize;
+
+	float crossOffset = 0.f;
+	float crossSpacing = 0.f;
+
+	switch (alignContent)
+	{
+	case ArFlexLayoutAlignContent::Center:
+		crossOffset = (GetCrossSize(availableSize) - totalCrossSize) * 0.5f;
+		break;
+	case ArFlexLayoutAlignContent::Stretch:
+		if (!lines.empty())
+		{
+			float totalCross = 0.f;
+			for (auto& line : lines) totalCross += line.crossAxisSize;
+			float remain = GetCrossSize(availableSize) - totalCross;
+			if (remain > 0.f) {
+				float extra = remain / lines.size();
+				for (auto& line : lines) line.crossAxisSize += extra;
+			}
+		}
+		break;
+	case ArFlexLayoutAlignContent::FlexEnd:
+		crossOffset = GetCrossSize(availableSize) - totalCrossSize;
+		break;
+	case ArFlexLayoutAlignContent::SpaceBetween:
+		if (lines.size() > 1)
+			crossSpacing = (GetCrossSize(availableSize) - totalCrossSize) / (lines.size() - 1);
+		break;
+	case ArFlexLayoutAlignContent::SpaceAround:
+		if (lines.size() > 0)
+			crossSpacing = (GetCrossSize(availableSize) - totalCrossSize) / lines.size();
+		crossOffset = crossSpacing * 0.5f;
+		break;
+	case ArFlexLayoutAlignContent::SpaceEvenly:
+		if (lines.size() > 0)
+			crossSpacing = (GetCrossSize(availableSize) - totalCrossSize) / (lines.size() + 1);
+		crossOffset = crossSpacing;
+		break;
+	default:
+		break;
+	}
+
+	// Layout each line
+	for (const auto& line : lines)
+	{
+		// Calculate main-axis justification offset
+		float mainOffset = 0.f;
+		float extraSpace = containerMainSize - line.mainAxisSize;
+		float gap = 0.f;
+		float totalFlexGrow = 0.f;
+
+		switch (justifyContent)
+		{
+		case ArFlexLayoutJustifyContent::Center:
+			mainOffset = extraSpace * 0.5f;
+			break;
+		case ArFlexLayoutJustifyContent::FlexEnd:
+			mainOffset = extraSpace;
+			break;
+		case ArFlexLayoutJustifyContent::SpaceBetween:
+			if (line.items.size() > 1)
+				gap = extraSpace / (line.items.size() - 1);
+			break;
+		case ArFlexLayoutJustifyContent::SpaceAround:
+			gap = extraSpace / line.items.size();
+			mainOffset = gap * 0.5f;
+			break;
+		case ArFlexLayoutJustifyContent::SpaceEvenly:
+			gap = extraSpace / (line.items.size() + 1);
+			mainOffset = gap;
+			break;
+		default:
+			break;
+		}
+
+		// Calculate flex-grow
+		for (auto* child : line.items)
+		{
+			auto* flexItem = child->GetComponent<ArFlexItemComp>();
+			if (!flexItem)
+				continue;
+			totalFlexGrow += flexItem->flexGrow;
+		}
+
+		// Layout children in line
+		float currentMain = mainOffset;
+		for (auto* child : line.items)
+		{
+			if (!child) continue;
+			auto* flexItem = child->GetComponent<ArFlexItemComp>();
+			if (!flexItem)
+				continue;
+
+			ArVec2 childSize = child->borderBox.GetContentSize();
+			auto& margin = child->borderBox.margin;
+
+			float childMainSize = GetMainSize(childSize);
+			float childCrossSize = GetCrossSize(childSize);
+
+			// Cross-alignment: alignItems / alignSelf
+			ArFlexLayoutAlignItems align = alignItems;
+			if (flexItem->alignSelf != ArFlexLayoutAlignItems::None)
+				align = flexItem->alignSelf;
+
+			float crossPos = crossOffset;
+			switch (align)
+			{
+			case ArFlexLayoutAlignItems::Center:
+				crossPos += (line.crossAxisSize - childCrossSize) * 0.5f;
+				break;
+			case ArFlexLayoutAlignItems::FlexEnd:
+				crossPos += (line.crossAxisSize - childCrossSize);
+				break;
+			case ArFlexLayoutAlignItems::Stretch:
+			{
+				if (IsHorizontal()) 
+				{
+					float newHeight = line.crossAxisSize - margin.Top() - margin.Bottom();
+					child->borderBox.content.y = std::max(child->borderBox.content.y, newHeight);
+				}
+				else 
+				{
+					float newWidth = line.crossAxisSize - margin.Left() - margin.Right();
+					child->borderBox.content.x = std::max(child->borderBox.content.x, newWidth);
+				}
+			}
+				break;
+			default:
+				break;
+			}
+
+			// Compute position
+			float mainPos = currentMain + (IsHorizontal() ? margin.Left() : margin.Top());
+			crossPos += (IsHorizontal() ? margin.Top() : margin.Left());
+
+			ArVec2 pos = MakeVec(mainPos, crossPos);
+			child->borderBox.localPosition = pos;
+
+			// Compute size
+			if (extraSpace > 0.f && totalFlexGrow > 0.f)
+			{
+				ArVec2& size = child->borderBox.content;
+				float basis = flexItem->flexBasis;
+
+				basis += flexItem->flexGrow / totalFlexGrow * extraSpace;
+
+				SelectMain(size.x, size.y) = basis;
+			}
+
+			currentMain += childMainSize + GetMainMargin(margin) + gap;
+		}
+
+		crossOffset += line.crossAxisSize + crossSpacing;
+	}
 }
 
-void ArGraphicFocusSelectorElement::OnRender(const ArgonContext& context)
+void ArGraphicPrimRenderListElement::Awake(ArgonContext& context)
 {
-	renderList->AddRect(boundingBox.GetRect(), AR_COL32(255.f, 255.f, 255.f, alphaAnimation->value), 2.f);
+	borderBox.overflow = true;
 }
 
 ArGraphicLayer::~ArGraphicLayer()
@@ -336,26 +570,45 @@ void ArGraphicLayer::StartFrame(ArgonContext& context)
 
 	for (ArGraphicElement* element : elements)
 	{
-		element->StartFrame(context);
+		element->FrameUpdate(context);
 	}
 }
 
 void ArGraphicLayer::EndFrame(ArgonContext& context)
 {
-	for (auto it = elements.begin(); it != elements.end(); )
+	if (anyElementDead)
 	{
-		ArGraphicElement* element = *it;
-		element->EndFrame(context);
+		std::stack<ArGraphicElement*> stack = {};
+		std::for_each(elements.begin(), elements.end(), [&stack](ArGraphicElement* element) { stack.push(element); });
 
-		if (element->dead)
+		while (!stack.empty())
 		{
-			it = elements.erase(it);
-			delete element;
+			ArGraphicElement* element = stack.top();
+			stack.pop();
+
+			if (ArHasFlag(element->flags, ArGraphicElementFlag::Dead))
+			{
+				if (element->owner)
+				{
+					element->owner->beingState |= ArGraphicElementBeingState::ChildRemoved;
+					element->owner->children.erase(std::remove(element->owner->children.begin(), element->owner->children.end(), element), element->owner->children.end());
+				}
+				else
+				{
+					elements.erase(std::remove(elements.begin(), elements.end(), element), elements.end());
+				}
+				delete element;
+			}
+			else
+			{
+				for (const auto& child : element->children)
+				{
+					stack.push(child);
+				}
+			}
 		}
-		else
-		{
-			++it;
-		}
+
+		anyElementDead = false;
 	}
 }
 
@@ -366,21 +619,14 @@ void ArGraphicLayer::UpdateFocus(ArgonContext& context)
 	{
 		if (currentHoveringElement != hoveringElement)
 		{
-			if (hoveringElement) hoveringElement->hovered = false;
-			if (currentHoveringElement) currentHoveringElement->hovered = true;
 			hoveringElement = currentHoveringElement;
 		}
 		if (context.inputManager.IsMouseButtonDown(ArMouseButton::Left))
 		{
 			if (hoveringElement)
-			{
-				hoveringElement->focusing = true;
 				SetFocus(hoveringElement);
-			}
 			else
-			{
 				SetFocus(nullptr);
-			}
 		}
 	}
 }
@@ -404,13 +650,14 @@ ArGraphicElement* ArGraphicLayer::HitTest(const ArVec2& pos) const
 		ArGraphicElement* element = stack.top();
 		stack.pop();
 
-		if (!element->interactive || element->dead || !element->visible)
+		if (ArHasFlag(element->flags, ArGraphicElementFlag::Dead) ||
+			ArLacksAnyFlags(element->flags, ArGraphicElementFlag::Interactive, ArGraphicElementFlag::Visible))
 			continue;
 
 		if (!element->HitTest(pos))
 			continue;
 
-		if (element->focusable && element->depth > topMostDepth)
+		if (ArHasFlag(element->flags, ArGraphicElementFlag::Focusable) && element->depth > topMostDepth)
 		{
 			// Check if the element's index of root is greater than the topMostElement's index
 			if (topMostElement)
@@ -436,10 +683,8 @@ void ArGraphicLayer::SetFocus(ArGraphicElement* element)
 {
 	if (element == focusingElement)
 		return;
-	if (focusingElement) focusingElement->focusing = false;
 	if (element)
 	{
-		element->focusing = true;
 		auto it = std::find(elements.begin(), elements.end(), element->root);
 		std::rotate(it, it + 1, elements.end());
 	}
@@ -469,7 +714,6 @@ void ArgonGraphicManager::Awake()
 {
 	backgroundLayer->AddElement(backgroundRenderListElement);
 	foregroundLayer->AddElement(foregroundRenderListElement);
-	foregroundLayer->AddElement(focusSelectorElement);
 }
 
 void ArgonGraphicManager::StartFrame(ArgonContext& context)
@@ -485,22 +729,22 @@ void ArgonGraphicManager::StartFrame(ArgonContext& context)
 		if (layer->focusingElement)
 		{
 			foundFocus = true;
-			focusingElement = layer->focusingElement;
+			SetFocus(layer->focusingElement);
 		}
 		if (layer->hoveringElement)
 		{
 			foundHover = true;
-			hoveringElement = layer->hoveringElement;
+			SetHover(layer->hoveringElement);
 		}
 		break;
 	}
 	if (!foundFocus)
 	{
-		focusingElement = nullptr;
+		SetFocus(nullptr);
 	}
 	if (!foundHover)
 	{
-		hoveringElement = nullptr;
+		SetHover(nullptr);
 	}
 
 	for (ArGraphicLayer* layer : layers)
@@ -548,4 +792,38 @@ ArGraphicLayer* ArgonGraphicManager::AddLayer(ArLayerAdditionPriority priority)
 	// 2. push the new layer to the position
 	layers.insert(baseIt + offset, newLayer);
 	return newLayer;
+}
+
+void ArgonGraphicManager::SetFocus(ArGraphicElement* element)
+{
+	if (element == focusingElement)
+		return;
+	if (focusingElement)
+	{
+		focusingElement->focusing = false;
+		focusingElement->beingState |= ArGraphicElementBeingState::Unfocus;
+	}
+	if (element)
+	{
+		element->focusing = true;
+		element->beingState |= ArGraphicElementBeingState::Focus;
+	}
+	focusingElement = element;
+}
+
+void ArgonGraphicManager::SetHover(ArGraphicElement* element)
+{
+	if (element == hoveringElement)
+		return;
+	if (hoveringElement)
+	{
+		hoveringElement->hovering = false;
+		hoveringElement->beingState |= ArGraphicElementBeingState::Unhover;
+	}
+	if (element)
+	{
+		element->hovering = true;
+		element->beingState |= ArGraphicElementBeingState::Hover;
+	}
+	hoveringElement = element;
 }

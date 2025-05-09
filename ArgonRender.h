@@ -61,8 +61,6 @@ public:
 
 	virtual bool Awake(const IArGlyphParserConfig& config) = 0;
 
-	virtual void OnDestroy() = 0;
-
 	virtual bool HasGlyph(ArGuiID fontId, uint32_t codepoint) const = 0;
 
 	virtual std::optional<FontFaceInitResult> InitFontFace(uint8_t* binary, size_t size) = 0;
@@ -88,6 +86,8 @@ public:
 class IArgonRenderer
 {
 public:
+	virtual ~IArgonRenderer() {}
+
 	virtual ArString Name() const = 0;
 
 	virtual bool Awake(const IArRendererConfig& config) = 0;
@@ -95,8 +95,6 @@ public:
 	virtual void StartFrame(const ArgonRenderManager& renderManager) = 0;
 
 	virtual void EndFrame(const ArgonRenderManager& renderManager, const ArDisplayState& displayState) = 0;
-
-	virtual void OnDestroy() = 0;
 
 	virtual ArTextureID CreateTexture(ArIntVec2 size, const void* pixels) = 0;
 
@@ -167,6 +165,8 @@ public:
 	ArRenderListSharedData();
 };
 
+class ArImage;
+
 // [CLASS] [ArgonRenderSystem] - Render list class. This class is used to store all the render commands and then render them in one go.
 class ArRenderList
 {
@@ -192,7 +192,7 @@ public:
 	ArRenderListFlag listFlags = ArRenderListFlag::UseAntiAliasing;
 
 	ArRenderList(ArRenderListSharedData* sharedData);
-	~ArRenderList() { Clear(); }
+	~ArRenderList();
 
 	void AddLine(const ArVec2& from, const ArVec2& to, uint32_t color, float thickness = 1.f);
 
@@ -214,7 +214,9 @@ public:
 
 	void AddCircleFilled(const ArVec2& center, float radius, uint32_t color, int numSegments = 0);
 
-	void AddImage(ArTextureID texture, const ArRect& rect, const ArRect& uv, uint32_t color, ArRenderFlag flags = ArRenderFlag::None);
+	void AddImage(ArTextureID texture, const ArRect& rect, const ArRect& uv, uint32_t color);
+
+	void AddImage(const ArImage& image, const ArRect& rect, uint32_t color);
 
 	void AddPolyline(const std::vector<ArVec2>& points, uint32_t color, ArRenderFlag flags = ArRenderFlag::None, float thickness = 1.f);
 
@@ -232,8 +234,6 @@ public:
 	void PopScissor();
 
 	ArTextureID GetCurrentTexture() const { return currentTexture; }
-
-	void Clear();
 protected:
 	void PrimRectWithUV(const ArRect& rect, const ArRect& uv, uint32_t color);
 
@@ -327,13 +327,15 @@ public:
 class ArGlyphInfo final
 {
 public:
-	uint32_t textureAtlasIndex = 0;
+	uint32_t landIndex = 0;
 	bool visible = false;
 	bool colored = false;
 	ArVec2 min = ArVec2(0.f, 0.f);
 	ArVec2 size = ArVec2(0.f, 0.f);
 	ArRect uv = ArRect();
 	float advanceX = 0.f;
+	float accentY = 0.f;
+	float descentY = 0.f;
 };
 
 // [CLASS] [ArgonRenderSystem] - Font face class. This class is used to store all the glyphs for a font face.
@@ -378,6 +380,15 @@ private:
 	ArGlyphInfo* FindGlyph(uint32_t codepoint, uint32_t size, ArGlyphFlag flags = ArGlyphFlag::None);
 };
 
+class ArImage final
+{
+public:
+	ArTextureID texture = nullptr;
+	ArVec2 size = ArVec2(0.f, 0.f);
+	ArVec2 scale = ArVec2(1.f, 1.f);
+	ArRect uv = ArRect();
+};
+
 // ----------------------------------------------------------- //
 //  [ARGON] [ArgonRender] ArgonRenderManager declaration
 // ----------------------------------------------------------- //
@@ -414,6 +425,8 @@ public:
 	std::vector<ArRenderList*> renderLists = {};
 	size_t totalVertexCount = 0;
 	size_t totalIndexCount = 0;
+
+	static const constexpr uint32_t TerritoryPadding = 1u;
 public:
 	ArgonRenderManager() {}
 	ArgonRenderManager(const ArgonRenderManager&) = delete;
@@ -437,7 +450,9 @@ public:
 
 	void AddFontFromCompressedBase85(const uint8_t* base85);
 
-	void AddFontFromFile(const std::filesystem::path& path);
+	void AddFontFromPath(const std::filesystem::path& path);
+
+	ArImage AddImage(uint32_t* pixels, const ArIntVec2& size);
 
 	ArTextureID GetDefaultTexture() const;
 

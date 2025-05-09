@@ -1,6 +1,9 @@
 ﻿#include "ArgonDx11Renderer.h"
 #include <d3dcompiler.h>
+
 #pragma comment(lib, "d3dcompiler")
+
+#define DX_SAFE_RELEASE(p) if ((p)) { (p)->Release(); (p) = nullptr; }
 
 bool ArDx11Buffer::Create(ID3D11Device* device)
 {
@@ -39,6 +42,93 @@ bool ArDx11Buffer::Expand(size_t size, ID3D11Device* device)
 	return Create(device);
 }
 
+void ArDx11RendererObjectBackups::Backup(ID3D11DeviceContext* deviceContext)
+{
+	deviceContext->RSGetScissorRects(&scissorCount, scissorRects);
+	deviceContext->RSGetViewports(&viewportCount, viewports);
+	deviceContext->RSGetState(&rasterizerState);
+	deviceContext->OMGetBlendState(&blendState, blendFactor, &sampleMask);
+	deviceContext->OMGetDepthStencilState(&depthStencilState, &stencilRef);
+	deviceContext->PSGetShaderResources(0, 1, &pixelShaderResources);
+	deviceContext->PSGetSamplers(0, 1, &pixelShaderSamplers);
+	deviceContext->PSGetShader(&pixelShader, pixelShaderInstances, &pixelShaderInstanceCount);
+	deviceContext->VSGetShader(&vertexShader, vertexShaderInstances, &vertexShaderInstanceCount);
+	deviceContext->VSGetConstantBuffers(0, 1, &vertexConstantBuffer);
+	deviceContext->GSGetShader(&geometryShader, geometryShaderInstances, &geometryShaderInstanceCount);
+	deviceContext->IAGetPrimitiveTopology(&primitiveTopology);
+	deviceContext->IAGetInputLayout(&inputLayout);
+	deviceContext->IAGetVertexBuffers(0, 1, &vertexBuffer, &vertexBufferStride, &vertexBufferOffset);
+	deviceContext->IAGetIndexBuffer(&indexBuffer, &indexBufferFormat, &indexBufferOffset);
+}
+
+void ArDx11RendererObjectBackups::Restore(ID3D11DeviceContext* deviceContext)
+{
+	deviceContext->RSSetScissorRects(scissorCount, scissorRects);
+	deviceContext->RSSetViewports(viewportCount, viewports);
+	deviceContext->RSSetState(rasterizerState);
+	deviceContext->OMSetBlendState(blendState, blendFactor, sampleMask);
+	deviceContext->OMSetDepthStencilState(depthStencilState, stencilRef);
+	deviceContext->PSSetShaderResources(0, 1, &pixelShaderResources);
+	deviceContext->PSSetSamplers(0, 1, &pixelShaderSamplers);
+	deviceContext->PSSetShader(pixelShader, pixelShaderInstances, pixelShaderInstanceCount);
+	deviceContext->VSSetShader(vertexShader, vertexShaderInstances, vertexShaderInstanceCount);
+	deviceContext->GSSetShader(geometryShader, geometryShaderInstances, geometryShaderInstanceCount);
+	deviceContext->IASetPrimitiveTopology(primitiveTopology);
+	deviceContext->IASetInputLayout(inputLayout);
+	deviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &vertexBufferStride, &vertexBufferOffset);
+	deviceContext->IASetIndexBuffer(indexBuffer, indexBufferFormat, indexBufferOffset);
+
+	DX_SAFE_RELEASE(rasterizerState);
+	DX_SAFE_RELEASE(blendState);
+	DX_SAFE_RELEASE(depthStencilState);
+	DX_SAFE_RELEASE(pixelShaderResources);
+	DX_SAFE_RELEASE(pixelShaderSamplers);
+	DX_SAFE_RELEASE(pixelShader);
+	DX_SAFE_RELEASE(vertexShader);
+	DX_SAFE_RELEASE(geometryShader);
+	DX_SAFE_RELEASE(inputLayout);
+	DX_SAFE_RELEASE(vertexConstantBuffer);
+	DX_SAFE_RELEASE(vertexBuffer);
+	DX_SAFE_RELEASE(indexBuffer);
+	for (UINT i = 0; i < pixelShaderInstanceCount; i++)DX_SAFE_RELEASE(pixelShaderInstances[i]);
+	for (UINT i = 0; i < vertexShaderInstanceCount; i++)DX_SAFE_RELEASE(vertexShaderInstances[i]);
+	for (UINT i = 0; i < geometryShaderInstanceCount; i++)DX_SAFE_RELEASE(geometryShaderInstances[i]);
+}
+
+ArgonDx11Renderer::~ArgonDx11Renderer()
+{
+	vertexBuffer.Release();
+
+	indexBuffer.Release();
+
+	vertexConstantBuffer.Release();
+
+	DX_SAFE_RELEASE(defaultPixelShader);
+
+	DX_SAFE_RELEASE(defaultVertexShader);
+
+	DX_SAFE_RELEASE(inputLayout);
+
+	DX_SAFE_RELEASE(rasterizerState);
+
+	DX_SAFE_RELEASE(blendState);
+
+	DX_SAFE_RELEASE(depthStencilState);
+
+	DX_SAFE_RELEASE(samplerState);
+
+	DX_SAFE_RELEASE(device);
+
+	DX_SAFE_RELEASE(deviceContext);
+
+	DX_SAFE_RELEASE(swapChain);
+
+	for (auto& texture : textures)
+	{
+		DX_SAFE_RELEASE(texture.second);
+	}
+}
+
 bool ArgonDx11Renderer::Awake(const IArRendererConfig& config)
 {
 	const ArDx11RendererConfig& dx11Config = static_cast<const ArDx11RendererConfig&>(config);
@@ -50,7 +140,6 @@ bool ArgonDx11Renderer::Awake(const IArRendererConfig& config)
 
 	if (!CreateRendererObjects())
 	{
-		ReleaseRendererObjects();
 		return false;
 	}
 
@@ -67,8 +156,126 @@ void ArgonDx11Renderer::StartFrame(const ArgonRenderManager& renderManager)
 	}
 }
 
-void ArgonDx11Renderer::EndFrame(const ArgonRenderManager& renderManager, const ArDisplayState& displayState)
+ArTextureID ArgonDx11Renderer::CreateTexture(ArIntVec2 size, const void* pixels)
 {
+	return CreateTextureInternal(size, pixels, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0, false);
+}
+
+ArShaderID ArgonDx11Renderer::CreateCustomShader(const IArRenderCustomCreateConfig& config)
+{
+	const ArDx11RenderCustomCreateConfig& dx11Config = static_cast<const ArDx11RenderCustomCreateConfig&>(config);
+	ID3DBlob* shaderBlob = nullptr;
+	ID3DBlob* errorBlob = nullptr;
+	D3DCompile(dx11Config.shaderCode.c_str(), dx11Config.shaderCode.size(), nullptr, nullptr, nullptr, "main", dx11Config.shaderModel.c_str(), 0, 0, &shaderBlob, &errorBlob);
+	if (errorBlob)
+	{
+		const char* errorMessage = (const char*)errorBlob->GetBufferPointer();
+ 		errorBlob->Release();
+		return nullptr;
+	}
+	if (dx11Config.shaderType == ArDx11RenderCustomCreateConfig::ShaderType::Vertex)
+	{
+		ID3D11VertexShader* vertexShader = nullptr;
+		if (device->CreateVertexShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &vertexShader) != S_OK)
+		{
+			shaderBlob->Release();
+			return nullptr;
+		}
+		return vertexShader;
+	}
+	else
+	{
+		ID3D11PixelShader* pixelShader = nullptr;
+		if (device->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &pixelShader) != S_OK)
+		{
+			shaderBlob->Release();
+			return nullptr;
+		}
+		return pixelShader;
+	}
+	return nullptr;
+}
+
+void ArgonDx11Renderer::SetCurrentVertexShader(ArShaderID shader)
+{
+	if (!shader)
+	{
+		currentVertexShader = defaultVertexShader;
+		return;
+	}
+	currentVertexShader = (ID3D11VertexShader*)shader;
+}
+
+bool ArgonDx11Renderer::SetVertexShaderConstantBuffer(const void* data, size_t size)
+{
+	if (!data || size == 0)
+		return false;
+
+	if (vertexShaderParamsBuffer.Size() < size || !vertexShaderParamsBuffer.IsCreated())
+	{
+		if (!vertexShaderParamsBuffer.Expand(size, device))
+			return false;
+	}
+
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	if (deviceContext->Map(vertexShaderParamsBuffer.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource) != S_OK)
+		return false;
+	memcpy(mappedResource.pData, data, size);
+	deviceContext->Unmap(vertexShaderParamsBuffer.buffer, 0);
+	deviceContext->VSSetConstantBuffers(1, 1, &vertexShaderParamsBuffer.buffer);
+	return true;
+}
+
+void ArgonDx11Renderer::SetCurrentPixelShader(ArShaderID shader)
+{
+	if (!shader)
+	{
+		currentPixelShader = defaultPixelShader;
+		return;
+	}
+	currentPixelShader = (ID3D11PixelShader*)shader;
+}
+
+bool ArgonDx11Renderer::SetPixelShaderConstantBuffer(const void* data, size_t size)
+{
+	if (!data || size == 0)
+		return false;
+	if (pixelShaderParamsBuffer.Size() < size || !pixelShaderParamsBuffer.IsCreated())
+	{
+		if (!pixelShaderParamsBuffer.Expand(size, device))
+			return false;
+	}
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	if (deviceContext->Map(pixelShaderParamsBuffer.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource) != S_OK)
+		return false;
+	memcpy(mappedResource.pData, data, size);
+	deviceContext->Unmap(pixelShaderParamsBuffer.buffer, 0);
+	deviceContext->PSSetConstantBuffers(0, 1, &pixelShaderParamsBuffer.buffer);
+	return true;
+}
+
+void ArgonDx11Renderer::ReleaseTexture(ArTextureID texture)
+{
+	if (texture)
+	{
+		((ID3D11ShaderResourceView*)texture)->Release();
+		texture = nullptr;
+	}
+}
+
+void ArgonDx11Renderer::ReleaseCustomShader(ArShaderID shader)
+{
+	if (shader)
+	{
+		((ID3D11DeviceChild*)shader)->Release();
+		shader = nullptr;
+	}
+}
+
+void ArgonDx11Renderer::Present(const ArgonRenderManager& renderManager, const ArDisplayState& displayState)
+{
+	backups.Backup(deviceContext);
+
 	// Resize buffers if needed
 	{
 		if (vertexBuffer.Size() < renderManager.totalVertexCount * sizeof(ArVertex))
@@ -91,6 +298,9 @@ void ArgonDx11Renderer::EndFrame(const ArgonRenderManager& renderManager, const 
 			{
 				std::copy(renderList->vertices.data(), renderList->vertices.data() + renderList->vertices.size(), vtxDst);
 				std::copy(renderList->indices.data(), renderList->indices.data() + renderList->indices.size(), idxDst);
+
+				renderList->vertices.free_data();
+				renderList->indices.free_data();
 
 				vtxDst += renderList->vertices.size();
 				idxDst += renderList->indices.size();
@@ -139,148 +349,7 @@ void ArgonDx11Renderer::EndFrame(const ArgonRenderManager& renderManager, const 
 			land.dirty = false;
 		}
 	}
-}
 
-void ArgonDx11Renderer::OnDestroy()
-{
-	vertexBuffer.Release();
-	indexBuffer.Release();
-	vertexConstantBuffer.Release();
-	ReleaseRendererObjects();
-	if (device)
-	{
-		device->Release();
-		device = nullptr;
-	}
-	if (deviceContext)
-	{
-		deviceContext->Release();
-		deviceContext = nullptr;
-	}
-	for (auto& texture : textures)
-	{
-		texture.second->Release();
-	}
-}
-
-ArTextureID ArgonDx11Renderer::CreateTexture(ArIntVec2 size, const void* pixels)
-{
-	return CreateTextureInternal(size, pixels, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0, false);
-}
-
-ArShaderID ArgonDx11Renderer::CreateCustomShader(const IArRenderCustomCreateConfig& config)
-{
-	const ArDx11RenderCustomCreateConfig& dx11Config = static_cast<const ArDx11RenderCustomCreateConfig&>(config);
-	ID3DBlob* shaderBlob = nullptr;
-	ID3DBlob* errorBlob = nullptr;
-	D3DCompile(dx11Config.shaderCode.c_str(), dx11Config.shaderCode.size(), nullptr, nullptr, nullptr, "main", dx11Config.shaderModel.c_str(), 0, 0, &shaderBlob, &errorBlob);
-	if (errorBlob)
-	{
-		const char* errorMessage = (const char*)errorBlob->GetBufferPointer();
- 		errorBlob->Release();
-		return nullptr;
-	}
-	if (dx11Config.shaderType == ArDx11RenderCustomCreateConfig::ShaderType::Vertex)
-	{
-		ID3D11VertexShader* vertexShader = nullptr;
-		if (device->CreateVertexShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &vertexShader) != S_OK)
-		{
-			shaderBlob->Release();
-			return nullptr;
-		}
-		return vertexShader;
-	}
-	else
-	{
-		ID3D11PixelShader* pixelShader = nullptr;
-		if (device->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &pixelShader) != S_OK)
-		{
-			shaderBlob->Release();
-			return nullptr;
-		}
-		return pixelShader;
-	}
-	return nullptr;
-}
-
-void ArgonDx11Renderer::SetCurrentVertexShader(ArShaderID shader)
-{
-	if (!shader)
-	{
-		currentVertexShader = defualtVertexShader;
-		return;
-	}
-	currentVertexShader = (ID3D11VertexShader*)shader;
-}
-
-bool ArgonDx11Renderer::SetVertexShaderConstantBuffer(const void* data, size_t size)
-{
-	if (!data || size == 0)
-		return false;
-
-	if (vertexShaderParmsBuffer.Size() < size || !vertexShaderParmsBuffer.IsCreated())
-	{
-		if (!vertexShaderParmsBuffer.Expand(size, device))
-			return false;
-	}
-
-	D3D11_MAPPED_SUBRESOURCE mappedResource;
-	if (deviceContext->Map(vertexShaderParmsBuffer.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource) != S_OK)
-		return false;
-	memcpy(mappedResource.pData, data, size);
-	deviceContext->Unmap(vertexShaderParmsBuffer.buffer, 0);
-	deviceContext->VSSetConstantBuffers(1, 1, &vertexShaderParmsBuffer.buffer);
-	return true;
-}
-
-void ArgonDx11Renderer::SetCurrentPixelShader(ArShaderID shader)
-{
-	if (!shader)
-	{
-		currentPixelShader = defualtPixelShader;
-		return;
-	}
-	currentPixelShader = (ID3D11PixelShader*)shader;
-}
-
-bool ArgonDx11Renderer::SetPixelShaderConstantBuffer(const void* data, size_t size)
-{
-	if (!data || size == 0)
-		return false;
-	if (pixelShaderParmsBuffer.Size() < size || !pixelShaderParmsBuffer.IsCreated())
-	{
-		if (!pixelShaderParmsBuffer.Expand(size, device))
-			return false;
-	}
-	D3D11_MAPPED_SUBRESOURCE mappedResource;
-	if (deviceContext->Map(pixelShaderParmsBuffer.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource) != S_OK)
-		return false;
-	memcpy(mappedResource.pData, data, size);
-	deviceContext->Unmap(pixelShaderParmsBuffer.buffer, 0);
-	deviceContext->PSSetConstantBuffers(0, 1, &pixelShaderParmsBuffer.buffer);
-	return true;
-}
-
-void ArgonDx11Renderer::ReleaseTexture(ArTextureID texture)
-{
-	if (texture)
-	{
-		((IUnknown*)texture)->Release();
-		texture = nullptr;
-	}
-}
-
-void ArgonDx11Renderer::ReleaseCustomShader(ArShaderID shader)
-{
-	if (shader)
-	{
-		((IUnknown*)shader)->Release();
-		shader = nullptr;
-	}
-}
-
-void ArgonDx11Renderer::Present(const ArgonRenderManager& renderManager, const ArDisplayState& displayState)
-{
 	D3D11_VIEWPORT vp = {};
 	vp.Width = (FLOAT)displayState.size.x;
 	vp.Height = (FLOAT)displayState.size.y;
@@ -324,6 +393,8 @@ void ArgonDx11Renderer::Present(const ArgonRenderManager& renderManager, const A
 		globalIndexOffset += renderList->indices.size();
 		globalVertexOffset += renderList->vertices.size();
 	}
+
+	backups.Restore(deviceContext);
 }
 
 bool ArgonDx11Renderer::IsRunning() const
@@ -332,7 +403,7 @@ bool ArgonDx11Renderer::IsRunning() const
 		return false;
 	if (!vertexBuffer.IsCreated() || !indexBuffer.IsCreated())
 		return false;
-	if (!defualtVertexShader || !defualtPixelShader || !inputLayout)
+	if (!defaultVertexShader || !defaultPixelShader || !inputLayout)
 		return false;
 	if (!rasterizerState || !blendState || !depthStencilState || !samplerState)
 		return false;
@@ -383,7 +454,7 @@ bool ArgonDx11Renderer::CreateVertexShader()
 	ID3DBlob* vertexShaderBlob;
 	if (FAILED(D3DCompile(vertexShaderCode, strlen(vertexShaderCode), nullptr, nullptr, nullptr, "main", "vs_4_0", 0, 0, &vertexShaderBlob, nullptr)))
 		return false; // NB: Pass ID3DBlob* pErrorBlob to D3DCompile() to get error showing in (const char*)pErrorBlob->GetBufferPointer(). Make sure to Release() the blob!
-	if (device->CreateVertexShader(vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), nullptr, &defualtVertexShader) != S_OK)
+	if (device->CreateVertexShader(vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), nullptr, &defaultVertexShader) != S_OK)
 	{
 		vertexShaderBlob->Release();
 		return false;
@@ -407,7 +478,7 @@ bool ArgonDx11Renderer::CreateVertexShader()
 	if (!vertexConstantBuffer.Create(device))
 		return false;
 
-	currentVertexShader = defualtVertexShader;
+	currentVertexShader = defaultVertexShader;
 
 	return true;
 
@@ -434,14 +505,14 @@ bool ArgonDx11Renderer::CreatePixelShader()
 	ID3DBlob* pixelShaderBlob;
 	if (FAILED(D3DCompile(pixelShaderCode, strlen(pixelShaderCode), nullptr, nullptr, nullptr, "main", "ps_4_0", 0, 0, &pixelShaderBlob, nullptr)))
 		return false; // NB: Pass ID3DBlob* pErrorBlob to D3DCompile() to get error showing in (const char*)pErrorBlob->GetBufferPointer(). Make sure to Release() the blob!
-	if (device->CreatePixelShader(pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize(), nullptr, &defualtPixelShader) != S_OK)
+	if (device->CreatePixelShader(pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize(), nullptr, &defaultPixelShader) != S_OK)
 	{
 		pixelShaderBlob->Release();
 		return false;
 	}
 	pixelShaderBlob->Release();
 
-	currentPixelShader = defualtPixelShader;
+	currentPixelShader = defaultPixelShader;
 
 	return true;
 
@@ -509,45 +580,6 @@ bool ArgonDx11Renderer::CreateStates()
 
 	return true;
 
-}
-
-void ArgonDx11Renderer::ReleaseRendererObjects()
-{
-	if (defualtPixelShader)
-	{
-		defualtPixelShader->Release();
-		defualtPixelShader = nullptr;
-	}
-	if (defualtVertexShader)
-	{
-		defualtVertexShader->Release();
-		defualtVertexShader = nullptr;
-	}
-	if (inputLayout)
-	{
-		inputLayout->Release();
-		inputLayout = nullptr;
-	}
-	if (rasterizerState)
-	{
-		rasterizerState->Release();
-		rasterizerState = nullptr;
-	}
-	if (blendState)
-	{
-		blendState->Release();
-		blendState = nullptr;
-	}
-	if (depthStencilState)
-	{
-		depthStencilState->Release();
-		depthStencilState = nullptr;
-	}
-	if (samplerState)
-	{
-		samplerState->Release();
-		samplerState = nullptr;
-	}
 }
 
 ArTextureID ArgonDx11Renderer::CreateTextureInternal(ArIntVec2 size, const void* pixels, D3D11_USAGE usage, uint32_t bindFlags, uint32_t cpuAccessFlags, uint32_t miscFlags, bool recordResource = true)

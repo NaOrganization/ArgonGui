@@ -76,21 +76,21 @@ enum class ArInputAction
 //  !. Event data declarations
 // ---------------------------------------------------------- //
 
-// [UNION] [ArgonInputSystem] - Data structure for input events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for input events.
 class ArMouseEventData
 {
 public:
 	ArMouseInputSource source = ArMouseInputSource::None;
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for mouse movement events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for mouse movement events.
 class ArMouseMoveEventData final : public ArMouseEventData
 {
 public:
 	ArVec2 position = ArVec2();
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for mouse button events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for mouse button events.
 class ArMouseButtonEventData final : public ArMouseEventData
 {
 public:
@@ -98,14 +98,14 @@ public:
 	bool pressing = false;
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for mouse wheel events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for mouse wheel events.
 class ArMouseWheelEventData final : public ArMouseEventData
 {
 public:
 	ArVec2 wheelDelta = ArVec2();
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for keyboard events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for keyboard events.
 class ArKeyboardEventData final
 {
 public:
@@ -113,14 +113,14 @@ public:
 	bool pressing = false;
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for gamepad events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for gamepad events.
 class ArGamepadEventData
 {
 public:
 	int index = 0;
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for gamepad button events.
+// [UNIOVARIANT:TYPEN] [ArgonInputSystem] - Data structure for gamepad button events.
 class ArGamepadButtonEventData final : public ArGamepadEventData
 {
 public:
@@ -128,35 +128,42 @@ public:
 	bool pressing = false;
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for gamepad left stick events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for gamepad left stick events.
 class ArGamepadLeftStickEventData final : public ArGamepadEventData
 {
 public:
 	ArVec2 leftStick = ArVec2();
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for gamepad right stick events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for gamepad right stick events.
 class ArGamepadRightStickEventData final : public ArGamepadEventData
 {
 public:
 	ArVec2 rightStick = ArVec2();
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for gamepad left trigger events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for gamepad left trigger events.
 class ArGamepadLeftTriggerEventData final : public ArGamepadEventData
 {
 public:
 	float leftTrigger = 0.0f;
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for gamepad right trigger events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for gamepad right trigger events.
 class ArGamepadRightTriggerEventData final : public ArGamepadEventData
 {
 public:
 	float rightTrigger = 0.0f;
 };
 
-// [UNION] [ArgonInputSystem] - Data structure for display events.
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for noticing the gamepad disconnection.
+class ArGamepadConnectionEventData final : public ArGamepadEventData
+{
+public:
+	bool connected = false;
+};
+
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for display events.
 class ArDisplayEventData final
 {
 public:
@@ -164,11 +171,18 @@ public:
 	ArVec2 size = ArVec2();
 };
 
+// [VARIANT:TYPE] [ArgonInputSystem] - Data structure for character input events.
+class ArInputCharacterEventData final
+{
+public:
+	std::vector<ArChar> characters = {};
+};
+
 // ----------------------------------------------------------- //
 //  [ARGON] [ArgonInput] Input event declarations
 // ----------------------------------------------------------- //
 
-// [UNION] [ArInputEvent] - Input event structure.
+// [STRUCT] [ArInputEvent] - Input event structure.
 class ArInputEvent final
 {
 public:
@@ -187,6 +201,26 @@ public:
 	ArInputAction frameAction = ArInputAction::None;
 	bool pressing = false;
 	std::vector<ArTimePoint> pressTimes = {};
+};
+
+class ArMouseButtonState final
+{
+public:
+	class PressedState final
+	{
+	public:
+		ArInputAction frameAction = ArInputAction::None;
+		ArTimePoint pressTime = ArTimePoint();
+		ArVec2 pressPosition = ArVec2();
+
+		PressedState(const ArTimePoint& pressTime, const ArVec2& pressPosition, ArInputAction frameAction = ArInputAction::None)
+			: pressTime(pressTime), pressPosition(pressPosition), frameAction(frameAction) {
+		}
+	};
+
+	ArInputAction frameAction = ArInputAction::None;
+	bool pressing = false;
+	std::vector<PressedState> pressStates = {};
 };
 
 // [STRUCT] [ArgonInputSystem] - Base class for input device states.
@@ -210,7 +244,7 @@ public:
 	ArVec2 delta = ArVec2();
 	ArVec2 wheelDelta = ArVec2();
 
-	std::unordered_map<ArMouseButton, ArButtonState> buttonStates = {};
+	std::unordered_map<ArMouseButton, ArMouseButtonState> buttonStates = {};
 
 	void HandleEvent(const ArInputEvent& event) override;
 	void EndFrame() override;
@@ -269,6 +303,8 @@ private:
 	ArKeyboardState keyboardState = ArKeyboardState();
 	std::array<ArGamepadState, 4> gamepadStates = {}; // Assuming a maximum of 4 gamepads
 	ArDisplayState displayState = ArDisplayState();
+
+	std::queue<ArChar> inputCharacterQueue = {};
 public:
 	static constexpr const ArDuration MaxClickInterval = 500ms;
 	static constexpr const float MouseClickedDeltaAllowance = 5.f; // Allowance for mouse click movement
@@ -315,7 +351,6 @@ public:
 	ArDisplayState GetDisplayState() const;
 private:
 	void ParseEvent(const ArInputEvent& event);
-	bool IsButtonClicked(const ArButtonState& buttonState, int clickCount) const;
 };
 
 // ----------------------------------------------------------- //
@@ -333,13 +368,13 @@ public:
 class IArgonPlatform
 {
 public:
+	~IArgonPlatform() {}
+
 	virtual ArString Name() const = 0;
 
 	virtual bool Awake(const IArPlatformConfig& config) = 0;
 
 	virtual void StartFrame(ArgonInputManager& inputManager) = 0;
-
-	virtual void OnDestroy() = 0;
 
 	virtual bool IsRunning() const = 0;
 };

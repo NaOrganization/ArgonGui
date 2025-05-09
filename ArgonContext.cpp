@@ -75,15 +75,22 @@ bool ArgonContext::Awaken()
 
 void ArgonContext::Shutdown()
 {
+	renderManager.OnDestroy(renderer);
+
 	if (platform)
 	{
-		platform->OnDestroy();
+		delete platform;
 		platform = nullptr;
 	}
 	if (renderer)
 	{
-		renderer->OnDestroy();
+		delete renderer;
 		renderer = nullptr;
+	}
+	if (glyphParser)
+	{
+		delete glyphParser;
+		glyphParser = nullptr;
 	}
 	contextStatus.OnDestroy();
 }

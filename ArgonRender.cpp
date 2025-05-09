@@ -231,6 +231,17 @@ ArRenderList::ArRenderList(ArRenderListSharedData* sharedData)
 	AddNewBatch();
 }
 
+ArRenderList::~ArRenderList()
+{
+	textureStack.clear();
+	scissorStack.clear();
+	customPixelShaderStack.clear();
+	customVertexShaderStack.clear();
+	batches.clear();
+	vertices.clear();
+	indices.clear();
+}
+
 void ArRenderList::AddLine(const ArVec2& from, const ArVec2& to, uint32_t color, float thickness)
 {
 	if ((color & AR_COL32_A_MASK) == 0)
@@ -350,14 +361,28 @@ void ArRenderList::AddCircleFilled(const ArVec2& center, float radius, uint32_t 
 	PathFillConvex(color);
 }
 
-void ArRenderList::AddImage(ArTextureID texture, const ArRect& rect, const ArRect& uv, uint32_t color, ArRenderFlag flags)
+void ArRenderList::AddImage(ArTextureID texture, const ArRect& rect, const ArRect& uv, uint32_t color)
 {
 	if ((color & AR_COL32_A_MASK) == 0)
 		return;
 
-	PushTexture(texture);
+	if (texture != currentTexture)
+		PushTexture(texture);
 	PrimRectWithUV(rect, uv, color);
-	PopTexture();
+	if (texture != currentTexture)
+		PopTexture();
+}
+
+void ArRenderList::AddImage(const ArImage& image, const ArRect& rect, uint32_t color)
+{
+	if ((color & AR_COL32_A_MASK) == 0)
+		return;
+
+	if (image.texture != currentTexture)
+		PushTexture(image.texture);
+	PrimRectWithUV(rect, image.uv, color);
+	if (image.texture != currentTexture)
+		PopTexture();
 }
 
 void ArRenderList::AddPolyline(const std::vector<ArVec2>& points, uint32_t color, ArRenderFlag flags, float thickness)
@@ -711,7 +736,7 @@ void ArRenderList::AddText(ArStringView text, uint32_t size, const ArVec2& pos, 
 
 		if (glyph->visible)
 		{
-			const ArTextureLand& land = sharedData->renderManager->lands[glyph->textureAtlasIndex];
+			const ArTextureLand& land = sharedData->renderManager->lands[glyph->landIndex];
 
 			PushTexture(land.GetTexture());
 
@@ -738,24 +763,6 @@ void ArRenderList::AddNewBatch()
 	currentBatch = &batches.back();
 }
 
-void ArRenderList::Clear()
-{
-	currentTexture = nullptr;
-	currentCustomPixelShader = nullptr;
-	currentCustomVertexShader = nullptr;
-	currentScissor = ArRect();
-	textureStack.resize(0);
-	scissorStack.resize(0);
-	customPixelShaderStack.resize(0);
-	customVertexShaderStack.resize(0);
-	batches.resize(0);
-	vertices.resize(0);
-	indices.resize(0);
-
-	batches.emplace_back();
-	currentBatch = &batches.back();
-}
-
 void ArRenderList::PrimRectWithUV(const ArRect& rect, const ArRect& uv, uint32_t color)
 {
 	RequireSpace(4, 6);
@@ -765,9 +772,9 @@ void ArRenderList::PrimRectWithUV(const ArRect& rect, const ArRect& uv, uint32_t
 	indices.emplace_back((uint16_t)(vertices.size() + 0));
 	indices.emplace_back((uint16_t)(vertices.size() + 2));
 	indices.emplace_back((uint16_t)(vertices.size() + 3));
-	vertices.emplace_back(ArVertex{ ArVec2(rect.min.x, rect.min.y), uv.min, color });
+	vertices.emplace_back(ArVertex{ rect.min, uv.min, color });
 	vertices.emplace_back(ArVertex{ ArVec2(rect.max.x, rect.min.y), ArVec2(uv.max.x, uv.min.y), color });
-	vertices.emplace_back(ArVertex{ ArVec2(rect.max.x, rect.max.y), uv.max, color });
+	vertices.emplace_back(ArVertex{ rect.max, uv.max, color });
 	vertices.emplace_back(ArVertex{ ArVec2(rect.min.x, rect.max.y), ArVec2(uv.min.x, uv.max.y), color });
 }
 
@@ -1093,7 +1100,7 @@ void ArFont::EndFrame(ArgonRenderManager& renderManager)
 		ArgonRenderManager::Territory territory = renderManager.AllocateTerritory((int)glyphInfo.size.x, (int)glyphInfo.size.y);
 		ArTextureLand& land = renderManager.lands[territory.landIndex];
 
-		glyphInfo.textureAtlasIndex = territory.landIndex;
+		glyphInfo.landIndex = territory.landIndex;
 
 		for (int y = 0; y < territory.size.y; y++)
 		{
@@ -1106,11 +1113,8 @@ void ArFont::EndFrame(ArgonRenderManager& renderManager)
 
 		delete[] task.pixels;
 
-		glyphInfo.uv = ArRect(
-			(float)(territory.position.x) * land.uvScale.x,
-			(float)(territory.position.y) * land.uvScale.y,
-			(float)(territory.position.x + territory.size.x) * land.uvScale.x,
-			(float)(territory.position.y + territory.size.y) * land.uvScale.y);
+		glyphInfo.uv = ArRect(territory.position * land.uvScale,
+			(territory.position + territory.size) * land.uvScale);
 		land.dirty = true;
 	}
 }
@@ -1165,6 +1169,10 @@ void ArgonRenderManager::EndFrame()
 
 void ArgonRenderManager::PostPresent()
 {
+	for (auto& renderList : renderLists)
+	{
+		delete renderList;
+	}
 	renderLists.clear();
 }
 
@@ -1202,7 +1210,7 @@ void ArgonRenderManager::AddFontFromCompressedBase85(const uint8_t* base85)
 	AddFontFromCompressed(binary, binarySize);
 }
 
-void ArgonRenderManager::AddFontFromFile(const std::filesystem::path& path)
+void ArgonRenderManager::AddFontFromPath(const std::filesystem::path& path)
 {
 	std::ifstream file = std::ifstream(path, std::ios::binary);
 	if (!file.is_open())
@@ -1216,6 +1224,28 @@ void ArgonRenderManager::AddFontFromFile(const std::filesystem::path& path)
 	file.close();
 
 	newFontRequests.emplace(binary, size);
+}
+
+ArImage ArgonRenderManager::AddImage(uint32_t* pixels, const ArIntVec2& size)
+{
+	Territory territory = AllocateTerritory(size.x, size.y);
+	ArTextureLand& land = lands[territory.landIndex];
+	for (int y = 0; y < size.y; y++)
+	{
+		uint32_t* write_ptr = &land.pixels[territory.position.x + ((territory.position.y + y) * land.size.x)];
+		for (int x = 0; x < territory.size.x; x++)
+			*(write_ptr + x) = pixels[x + y * size.x];
+	}
+	land.dirty = true;
+	ArTextureID texture = land.GetTexture();
+	ArRect uv = ArRect(territory.position * land.uvScale,
+		(territory.position + territory.size) * land.uvScale);
+	ArImage image = ArImage();
+	image.texture = texture;
+	image.uv = uv;
+	image.scale = ArVec2(1.f / size.x, 1.f / size.y);
+	image.size = territory.size;
+	return image;
 }
 
 ArTextureID ArgonRenderManager::GetDefaultTexture() const
@@ -1258,11 +1288,8 @@ ArVec2 ArgonRenderManager::CalcTextSize(ArStringView text, uint32_t size, ArGlyp
 		if (!glyphInfo)
 			continue;
 		textSize.x += glyphInfo->advanceX;
-		textSize.y = ArMax(textSize.y, glyphInfo->size.y);
+		textSize.y = ArMax(textSize.y, glyphInfo->min.y + glyphInfo->size.y);
 	}
-	ArVec2 padding = ArVec2(0.5f, 0.5f);
-	textSize.x += padding.x * 2;
-	textSize.y += padding.y * 2;
 	textSize.x = ArMax(textSize.x, 1.0f);
 	textSize.y = ArMax(textSize.y, 1.0f);
 	return textSize;
@@ -1274,8 +1301,8 @@ ArgonRenderManager::Territory ArgonRenderManager::AllocateTerritory(int width, i
 		return {};
 
 	stbrp_rect rect = {};
-	rect.w = width;
-	rect.h = height;
+	rect.w = width + TerritoryPadding * 2;
+	rect.h = height + TerritoryPadding * 2;
 
 	auto landIt = lands.begin();
 
@@ -1292,8 +1319,8 @@ ArgonRenderManager::Territory ArgonRenderManager::AllocateTerritory(int width, i
 
 		if (stbrp_pack_rects(&land.rectPackerContext, &rect, 1))
 		{
-			territory.landIndex = landIt - lands.begin();
-			territory.position = ArIntVec2(rect.x, rect.y);
+			territory.landIndex = (uint32_t)std::distance(lands.begin(), landIt);
+			territory.position = ArIntVec2(rect.x + TerritoryPadding, rect.y + TerritoryPadding);
 			break;
 		}
 

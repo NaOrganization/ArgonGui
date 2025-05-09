@@ -26,11 +26,10 @@ public:
 	std::array<XINPUT_STATE, 4> xinputStates = {};
 	std::array<bool, 4> xinputConnected = {};
 public:
-	ArgonWin32Platform() {}
+	~ArgonWin32Platform();
 
 	ArString Name() const override { return "Win32"; }
 	bool Awake(const IArPlatformConfig& config) override;
-	void OnDestroy() override;
 	void StartFrame(ArgonInputManager& inputManager) override;
 	bool IsRunning() const override { return xinputGetCapabilities && xinputGetState && xinputSetState && windowHwnd; }
 private:

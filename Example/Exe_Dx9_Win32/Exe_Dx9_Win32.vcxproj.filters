@@ -12,9 +12,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Backends\ArgonDx11Renderer.cpp">
-      <Filter>ArgonGui\Backends</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Backends\ArgonFreeTypeGlyphParser.cpp">
       <Filter>ArgonGui\Backends</Filter>
     </ClCompile>
@@ -39,11 +36,11 @@
     <ClCompile Include="..\..\ArgonRender.cpp">
       <Filter>ArgonGui</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Backends\ArgonDx9Renderer.cpp">
+      <Filter>ArgonGui\Backends</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Backends\ArgonDx11Renderer.h">
-      <Filter>ArgonGui\Backends</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Backends\ArgonFreeTypeGlyphParser.h">
       <Filter>ArgonGui\Backends</Filter>
     </ClInclude>
@@ -76,6 +73,9 @@
     </ClInclude>
     <ClInclude Include="..\Demo.h">
       <Filter>Main</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Backends\ArgonDx9Renderer.h">
+      <Filter>ArgonGui\Backends</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

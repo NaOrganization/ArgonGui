@@ -43,9 +43,10 @@ public:
 	float y = 0.f;
 
 	ArVec2() {}
-	ArVec2(const float& x, const float& y)
-		: x(x), y(y) {
-	}
+	ArVec2(float x, float y) : x(x), y(y) {}
+	ArVec2(int x, int y) : x((float)x), y((float)y) {}
+	ArVec2(uint32_t x, uint32_t y) : x((float)x), y((float)y) {}
+	ArVec2(const ArIntVec2& vec) : x((float)vec.x), y((float)vec.y) { }
 
 	ArVec2 Normalized() const
 	{
@@ -69,7 +70,7 @@ public:
 	float z = 0.f;
 
 	ArVec3() {}
-	ArVec3(const float& x, const float& y, const float& z)
+	ArVec3(float x, float y, float z)
 		: x(x), y(y), z(z) {
 	}
 };
@@ -83,10 +84,10 @@ public:
 	float w = 0.f;
 
 	ArVec4() {}
-	ArVec4(const float& x, const float& y, const float& z, const float& w)
+	ArVec4(float x, float y, float z, float w)
 		: x(x), y(y), z(z), w(w) {
 	}
-	ArVec4(const float& v)
+	ArVec4(float v)
 		: x(v), y(v), z(v), w(v) {
 	}
 };
@@ -120,9 +121,9 @@ public:
 		return ArVec4(r / 255.f, g / 255.f, b / 255.f, a / 255.f);
 	}
 
-	ArColor SetAlpha(float alpha) const
+	ArColor SetAlpha(float alphaAnimator) const
 	{
-		return ArColor(r, g, b, alpha);
+		return ArColor(r, g, b, alphaAnimator);
 	}
 };
 
@@ -137,6 +138,7 @@ inline ArIntVec2 operator*(const ArIntVec2& lhs, int s) { return ArIntVec2(lhs.x
 inline ArIntVec2 operator*(int s, const ArIntVec2& lhs) { return ArIntVec2(s * lhs.x, s * lhs.y); }
 inline ArIntVec2 operator/(const ArIntVec2& lhs, const ArIntVec2& rhs) { return ArIntVec2(lhs.x / rhs.x, lhs.y / rhs.y); }
 inline ArIntVec2 operator/(const ArIntVec2& lhs, int s) { return ArIntVec2(lhs.x / s, lhs.y / s); }
+inline bool operator==(const ArIntVec2& lhs, const ArIntVec2& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y; }
 inline ArIntVec2 operator-(const ArIntVec2& lhs) { return ArIntVec2(-lhs.x, -lhs.y); }
 inline ArIntVec2& operator+=(ArIntVec2& lhs, const ArIntVec2& rhs) { lhs.x += rhs.x; lhs.y += rhs.y; return lhs; }
 inline ArIntVec2& operator-=(ArIntVec2& lhs, const ArIntVec2& rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; return lhs; }
@@ -169,6 +171,7 @@ inline ArVec3 operator+(const ArVec3& lhs, const ArVec3& rhs) { return ArVec3(lh
 inline ArVec3 operator-(const ArVec3& lhs, const ArVec3& rhs) { return ArVec3(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z); }
 inline ArVec3 operator*(const ArVec3& lhs, const ArVec3& rhs) { return ArVec3(lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z); }
 inline ArVec3 operator/(const ArVec3& lhs, const ArVec3& rhs) { return ArVec3(lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z); }
+inline bool operator==(const ArVec3& lhs, const ArVec3& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z; }
 inline ArVec3 operator+(const ArVec3& lhs, float rhs) { return ArVec3(lhs.x + rhs, lhs.y + rhs, lhs.z + rhs); }
 inline ArVec3 operator-(const ArVec3& lhs, float rhs) { return ArVec3(lhs.x - rhs, lhs.y - rhs, lhs.z - rhs); }
 inline ArVec3 operator*(const ArVec3& lhs, float rhs) { return ArVec3(lhs.x * rhs, lhs.y * rhs, lhs.z * rhs); }
@@ -188,6 +191,7 @@ inline ArVec4 operator+(const ArVec4& lhs, const ArVec4& rhs) { return ArVec4(lh
 inline ArVec4 operator-(const ArVec4& lhs, const ArVec4& rhs) { return ArVec4(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w); }
 inline ArVec4 operator*(const ArVec4& lhs, const ArVec4& rhs) { return ArVec4(lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w); }
 inline ArVec4 operator/(const ArVec4& lhs, const ArVec4& rhs) { return ArVec4(lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w); }
+inline bool operator==(const ArVec4& lhs, const ArVec4& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.w == rhs.w; }
 inline ArVec4 operator+(const ArVec4& lhs, float rhs) { return ArVec4(lhs.x + rhs, lhs.y + rhs, lhs.z + rhs, lhs.w + rhs); }
 inline ArVec4 operator-(const ArVec4& lhs, float rhs) { return ArVec4(lhs.x - rhs, lhs.y - rhs, lhs.z - rhs, lhs.w - rhs); }
 inline ArVec4 operator*(const ArVec4& lhs, float rhs) { return ArVec4(lhs.x * rhs, lhs.y * rhs, lhs.z * rhs, lhs.w * rhs); }
@@ -277,6 +281,7 @@ public:
 	bool		Adjacent(const ArRect& r) const { return r.min.y == max.y || r.max.y == min.y || r.min.x == max.x || r.max.x == min.x; }
 	ArRect		Union(const ArRect& r) const { return ArRect(ArMin(min, r.min), ArMax(max, r.max)); }
 	ArRect		Intersection(const ArRect& r) const { return ArRect(ArMax(min, r.min), ArMin(max, r.max)); }
+	ArRect		Indented(float amount) const { return ArRect(min.x + amount, min.y + amount, max.x - amount, max.y - amount); }
 	void        Add(const ArVec2& p) { if (min.x > p.x)     min.x = p.x;     if (min.y > p.y)     min.y = p.y;     if (max.x < p.x)     max.x = p.x;     if (max.y < p.y)     max.y = p.y; }
 	void        Add(const ArRect& r) { if (min.x > r.min.x) min.x = r.min.x; if (min.y > r.min.y) min.y = r.min.y; if (max.x < r.max.x) max.x = r.max.x; if (max.y < r.max.y) max.y = r.max.y; }
 	void        Expand(const float amount) { min.x -= amount;   min.y -= amount;   max.x += amount;   max.y += amount; }

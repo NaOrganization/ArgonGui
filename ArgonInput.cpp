@@ -1,15 +1,6 @@
 ﻿#include "ArgonGui.h"
 #include <algorithm>
 
-void CleanupPressTimes(std::vector<ArTimePoint>& pressTimes)
-{
-	ArTimePoint currentTime = ArHelp::GetTimePoint();
-	pressTimes.erase(std::remove_if(pressTimes.begin(), pressTimes.end(),
-		[currentTime](const ArTimePoint& time) {
-			return (currentTime - time) > ArgonInputManager::MaxClickInterval;
-		}), pressTimes.end());
-}
-
 int GetGamepadEventIndex(const ArInputEvent& event)
 {
 	if (const auto& data = std::get_if<ArGamepadButtonEventData>(&event.eventData))
@@ -46,17 +37,18 @@ void ArMouseState::HandleEvent(const ArInputEvent& event)
 	else if (const auto& data = std::get_if<ArMouseButtonEventData>(&event.eventData))
 	{
 		ArMouseButton button = data->button;
-		ArButtonState& buttonState = buttonStates[button];
+		ArMouseButtonState& buttonState = buttonStates[button];
 
 		buttonState.pressing = data->pressing;
 
 		if (data->pressing)
 		{
-			buttonState.pressTimes.push_back(ArHelp::GetTimePoint());
+			buttonState.pressStates.emplace_back(ArHelp::GetTimePoint(), position, ArInputAction::Down);
 			buttonState.frameAction = ArInputAction::Down;
 		}
 		else
 		{
+			buttonState.pressStates.emplace_back(ArHelp::GetTimePoint(), position, ArInputAction::Up);
 			buttonState.frameAction = ArInputAction::Up;
 		}
 	}
@@ -71,7 +63,31 @@ void ArMouseState::EndFrame()
 	for (auto& [_, state] : buttonStates)
 	{
 		state.frameAction = ArInputAction::None;
-		CleanupPressTimes(state.pressTimes);
+		int pairCount = 0;
+		int popCount = 0;
+		ArTimePoint currentTime = ArHelp::GetTimePoint();
+		state.pressStates.erase(std::remove_if(state.pressStates.begin(), state.pressStates.end(),
+			[currentTime, &pairCount, &popCount](const ArMouseButtonState::PressedState& state) {
+				if (state.frameAction == ArInputAction::Down)
+				{
+					pairCount++;
+					return false;
+				}
+				else if (state.frameAction == ArInputAction::Up)
+				{
+					if (pairCount > 0)
+					{
+						pairCount--;
+						return false;
+					}
+					else
+					{
+						popCount++;
+						return true;
+					}
+				}
+				return pairCount == popCount && (currentTime - state.pressTime) > ArgonInputManager::MaxClickInterval;
+			}), state.pressStates.end());
 	}
 
 	delta = ArVec2();
@@ -104,7 +120,11 @@ void ArKeyboardState::EndFrame()
 	for (auto& [_, keyState] : keyStates)
 	{
 		keyState.frameAction = ArInputAction::None;
-		CleanupPressTimes(keyState.pressTimes);
+		ArTimePoint currentTime = ArHelp::GetTimePoint();
+		keyState.pressTimes.erase(std::remove_if(keyState.pressTimes.begin(), keyState.pressTimes.end(),
+			[currentTime](const ArTimePoint& time) {
+				return (currentTime - time) > ArgonInputManager::MaxClickInterval;
+			}), keyState.pressTimes.end());
 	}
 }
 
@@ -141,6 +161,10 @@ void ArGamepadState::HandleEvent(const ArInputEvent& event)
 	{
 		rightTrigger = data->rightTrigger;
 	}
+	else if (const auto& data = std::get_if<ArGamepadConnectionEventData>(&event.eventData))
+	{
+		enabled = data->connected;
+	}
 }
 
 void ArGamepadState::EndFrame()
@@ -148,7 +172,11 @@ void ArGamepadState::EndFrame()
 	for (auto& [_, state] : buttonStates)
 	{
 		state.frameAction = ArInputAction::None;
-		CleanupPressTimes(state.pressTimes);
+		ArTimePoint currentTime = ArHelp::GetTimePoint();
+		state.pressTimes.erase(std::remove_if(state.pressTimes.begin(), state.pressTimes.end(),
+			[currentTime](const ArTimePoint& time) {
+				return (currentTime - time) > ArgonInputManager::MaxClickInterval;
+			}), state.pressTimes.end());
 	}
 }
 
@@ -251,7 +279,23 @@ bool ArgonInputManager::IsMouseButtonClicked(ArMouseButton button, int clickCoun
 	auto it = mouseState.buttonStates.find(button);
 	if (it == mouseState.buttonStates.end())
 		return false;
-	return IsButtonClicked(it->second, clickCount);
+
+	clickCount += 1;
+
+	auto& times = it->second.pressStates;
+	size_t count = times.size();
+	if (count < static_cast<size_t>(clickCount))
+		return false;
+
+	ArMouseButtonState::PressedState lastPressedState = times[count - 1];
+	ArMouseButtonState::PressedState firstPressedState = times[count - clickCount];
+	ArDuration interval = lastPressedState.pressTime - firstPressedState.pressTime;
+	float distance = (lastPressedState.pressPosition - firstPressedState.pressPosition).Length();
+
+	if (it->second.frameAction != ArInputAction::Up)
+		return false;
+
+	return (clickCount > 2 ? interval < MaxClickInterval : true) && distance < MouseClickedDeltaAllowance && firstPressedState.frameAction == ArInputAction::Down;
 }
 
 ArVec2 ArgonInputManager::GetMousePosition() const
@@ -383,21 +427,4 @@ size_t ArgonInputManager::GetGamepadConnectedCount() const
 ArDisplayState ArgonInputManager::GetDisplayState() const
 {
 	return displayState;
-}
-
-bool ArgonInputManager::IsButtonClicked(const ArButtonState& buttonState, int clickCount) const
-{
-	if (clickCount <= 1)
-		return buttonState.frameAction == ArInputAction::Down;
-	if (buttonState.frameAction != ArInputAction::Down)
-		return false;
-	auto& times = buttonState.pressTimes;
-	size_t count = times.size();
-	if (count < static_cast<size_t>(clickCount))
-		return false;
-
-	ArTimePoint lastTime = times[count - 1];
-	ArTimePoint firstTime = times[count - clickCount];
-	ArDuration interval = lastTime - firstTime;
-	return interval < MaxClickInterval;
 }

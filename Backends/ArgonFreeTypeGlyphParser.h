@@ -23,9 +23,9 @@ public:
 	FT_Memory ftMemory = nullptr;
 	std::vector<ArFreeTypeFontInfo> fonts = {};
 public:
-	bool Awake(const IArGlyphParserConfig& config) override;
+	~ArgonFreeTypeGlyphParser();
 
-	void OnDestroy() override;
+	bool Awake(const IArGlyphParserConfig& config) override;
 
 	bool HasGlyph(ArGuiID fontId, uint32_t codepoint) const override;
 

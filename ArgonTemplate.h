@@ -21,10 +21,36 @@ operator|(Enum lhs, Enum rhs)
 
 template<typename Enum>
 typename std::enable_if<ArIsEnumFlag<Enum>::value, Enum>::type
+operator|=(Enum& lhs, Enum rhs)
+{
+	using Underlying = typename std::underlying_type<Enum>::type;
+	lhs = static_cast<Enum>(static_cast<Underlying>(lhs) | static_cast<Underlying>(rhs));
+	return lhs;
+}
+
+template<typename Enum>
+typename std::enable_if<ArIsEnumFlag<Enum>::value, Enum>::type
 operator&(Enum lhs, Enum rhs)
 {
 	using Underlying = typename std::underlying_type<Enum>::type;
 	return static_cast<Enum>(static_cast<Underlying>(lhs) & static_cast<Underlying>(rhs));
+}
+
+template<typename Enum>
+typename std::enable_if<ArIsEnumFlag<Enum>::value, Enum>::type
+operator&=(Enum& lhs, Enum rhs)
+{
+	using Underlying = typename std::underlying_type<Enum>::type;
+	lhs = static_cast<Enum>(static_cast<Underlying>(lhs) & static_cast<Underlying>(rhs));
+	return lhs;
+}
+
+template<typename Enum>
+typename std::enable_if<ArIsEnumFlag<Enum>::value, Enum>::type
+operator~(Enum value)
+{
+	using Underlying = typename std::underlying_type<Enum>::type;
+	return static_cast<Enum>(~static_cast<Underlying>(value));
 }
 
 template<typename Enum>
@@ -35,11 +61,45 @@ ArHasFlag(Enum value, Enum flag)
 	return (static_cast<Underlying>(value) & static_cast<Underlying>(flag)) != 0;
 }
 
+template<typename Enum>
+typename std::enable_if<ArIsEnumFlag<Enum>::value, bool>::type
+ArLackFlag(Enum value, Enum flag)
+{
+	using Underlying = typename std::underlying_type<Enum>::type;
+	return (static_cast<Underlying>(value) & static_cast<Underlying>(flag)) == 0;
+}
+
 template<typename Enum, typename... EnumFlags>
 typename std::enable_if<ArIsEnumFlag<Enum>::value && (ArIsEnumFlag<EnumFlags>::value && ...), bool>::type
-ArHasAnyFlag(Enum value, EnumFlags... flags)
+ArHasAnyFlags(Enum value, EnumFlags... flags)
 {
 	return (ArHasFlag(value, flags) || ...);
+}
+
+template<typename Enum, typename... EnumFlags>
+typename std::enable_if<ArIsEnumFlag<Enum>::value && (ArIsEnumFlag<EnumFlags>::value && ...), bool>::type
+ArLacksAnyFlags(Enum value, EnumFlags... flags)
+{
+	return (ArLackFlag(value, flags) && ...);
+}
+
+template<typename Enum, typename... EnumFlags>
+typename std::enable_if<ArIsEnumFlag<Enum>::value && (ArIsEnumFlag<EnumFlags>::value && ...), Enum>::type
+ArRemoveFlags(Enum& value, EnumFlags... flags)
+{
+	using Underlying = typename std::underlying_type<Enum>::type;
+	Underlying mask = 0;
+	((mask |= static_cast<Underlying>(flags)), ...);
+	return value = static_cast<Enum>(static_cast<Underlying>(value) & ~mask);
+}
+
+template<typename Enum, typename... EnumFlags>
+typename std::enable_if<ArIsEnumFlag<Enum>::value && (ArIsEnumFlag<EnumFlags>::value && ...), Enum>::type
+ArIfRemoveFlags(Enum& value, EnumFlags... flags)
+{
+	if (ArLacksAnyFlags(value, flags...))
+		return value;
+	return ArRemoveFlags(value, flags...);
 }
 
 template <typename T, size_t BlockSize = 2042, typename Allocator = std::allocator<T>>
@@ -197,39 +257,4 @@ public:
 				push_back(T());
 		}
 	}
-};
-
-template<typename T>
-class ArValueSubject
-{
-public:
-	using Observer = std::function<void(const T&)>;
-private:
-	std::vector<Observer> observers;
-	T value;
-public:
-	ArValueSubject() : value() {}
-	ArValueSubject(const T& initialValue) : value(initialValue) {}
-	void SetValue(const T& newValue)
-	{
-		value = newValue;
-		for (const auto& observer : observers)
-			observer(value);
-	}
-	const T& GetValue() const { return value; }
-	void AddObserver(Observer observer) { observer(value); observers.push_back(observer); }
-
-	T& operator=(const T& newValue) { SetValue(newValue); return value; }
-
-	T& operator*() { return value; }
-
-	T* operator->() { return &value; }
-
-	const T& operator*() const { return value; }
-
-	const T* operator->() const { return &value; }
-
-	bool operator==(const T& other) const { return value == other; }
-
-	bool operator!=(const T& other) const { return value != other; }
 };

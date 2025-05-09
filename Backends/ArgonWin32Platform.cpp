@@ -168,11 +168,17 @@ DWORD WINAPI XInputSetStateWrapper(void* address, DWORD dwUserIndex, XINPUT_VIBR
 	return ((DWORD(WINAPI*)(DWORD, XINPUT_VIBRATION*))(address))(dwUserIndex, pVibration);
 }
 
+ArgonWin32Platform::~ArgonWin32Platform()
+{
+	if (xinputDLL)
+		FreeModule(xinputDLL);
+}
+
 bool ArgonWin32Platform::Awake(const IArPlatformConfig& config)
 {
 	const ArWin32PlatformConfig& win32Config = static_cast<const ArWin32PlatformConfig&>(config);
 	windowHwnd = win32Config.windowHandle;
-	std::vector<std::string> xinput_dll_names =
+	static const std::vector<std::string> xinput_dll_names =
 	{
 		"xinput1_4.dll",   // Windows 8+
 		"xinput1_3.dll",   // DirectX SDK
@@ -194,13 +200,9 @@ bool ArgonWin32Platform::Awake(const IArPlatformConfig& config)
 			break;
 		}
 	}
-	return true;
-}
 
-void ArgonWin32Platform::OnDestroy()
-{
-	if (xinputDLL)
-		FreeModule(xinputDLL);
+	TryGamepads();
+	return true;
 }
 
 void ArgonWin32Platform::StartFrame(ArgonInputManager& inputManager)
@@ -218,7 +220,10 @@ void ArgonWin32Platform::GamepadUpdate(ArgonInputManager& inputManager)
 			return;
 		XINPUT_STATE state = {};
 		if (!xinputGetState || XInputGetStateWrapper(xinputGetState, i, &state) != ERROR_SUCCESS)
+		{
+			TryGamepads();
 			continue;
+		}
 		if (state.dwPacketNumber == xinputStates[i].dwPacketNumber)
 			continue;
 		XINPUT_GAMEPAD& gamepad = state.Gamepad;
@@ -263,7 +268,7 @@ void ArgonWin32Platform::GamepadUpdate(ArgonInputManager& inputManager)
 			if (leftStickMagnitude > inputManager.gamepadStickDeadZone)
 			{
 				leftStick.x /= leftStickMagnitude;
-				leftStick.y /= leftStickMagnitude;
+				leftStick.y /= -leftStickMagnitude;
 			}
 			else
 			{
@@ -367,7 +372,31 @@ void ArgonWin32Platform::TryGamepads()
 	{
 		XINPUT_CAPABILITIES caps = {};
 		if (!xinputGetCapabilities || XInputGetCapabilitiesWrapper(xinputGetCapabilities, i, XINPUT_FLAG_GAMEPAD, &caps) != ERROR_SUCCESS)
+		{
+			if (xinputConnected[i])
+			{
+				ArGamepadConnectionEventData eventData = {};
+				ArInputEvent event = {};
+				eventData.connected = false;
+				eventData.index = i;
+				event.deviceType = ArInputDevice::Gamepad;
+				event.eventData = eventData;
+				ArgonInputManager& inputManager = ArGui::GetInputManager();
+				inputManager.AddEvent(event);
+			}
 			continue;
+		}
+		if (xinputConnected[i] != true)
+		{
+			ArGamepadConnectionEventData eventData = {};
+			ArInputEvent event = {};
+			eventData.connected = true;
+			eventData.index = i;
+			event.deviceType = ArInputDevice::Gamepad;
+			event.eventData = eventData;
+			ArgonInputManager& inputManager = ArGui::GetInputManager();
+			inputManager.AddEvent(event);
+		}
 		xinputConnected[i] = true;
 	}
 }
@@ -601,6 +630,7 @@ LRESULT WINAPI ArWin32WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_DEVICECHANGE:
 		if ((UINT)wParam == DBT_DEVNODES_CHANGED)
 			platform->TryGamepads();
+		return 0;
 	default:
 		return 0;
 	}

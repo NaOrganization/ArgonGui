@@ -32,8 +32,9 @@
 *.app
 /x64
 /Example/.vs
-/Example/Exe_Dx11_Win32/x64
-/Example/Exe_Dx11_Win32/Release
+/Example/*/x64
+/Example/*/Release
+/Example/*/Debug
 /Example/x64
 /Example/Release
-
+/Example/Debug
